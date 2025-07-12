@@ -1,11 +1,343 @@
-/* Path: src/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-/* Import Google Fonts - Inter is used in the app */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-
-/* Apply Inter font to the body */
-body {
-    font-family: 'Inter', sans-serif;
+@layer base {
+  :root {
+    /* AmigaOS Workbench 1.3 Color Palette */
+    --amiga-blue: #0055AA;
+    --amiga-blue-dark: #003388;
+    --amiga-orange: #FF8800;
+    --amiga-light-gray: #CCCCCC;
+    --amiga-medium-gray: #AAAAAA;
+    --amiga-dark-gray: #555555;
+    --amiga-white: #FFFFFF;
+    --amiga-black: #000000;
+    
+    /* CSS Variables for AmigaOS Theme */
+    --background: var(--amiga-light-gray);
+    --foreground: var(--amiga-black);
+    --card: var(--amiga-white);
+    --card-foreground: var(--amiga-black);
+    --popover: var(--amiga-white);
+    --popover-foreground: var(--amiga-black);
+    --primary: var(--amiga-blue);
+    --primary-foreground: var(--amiga-white);
+    --secondary: var(--amiga-medium-gray);
+    --secondary-foreground: var(--amiga-black);
+    --muted: var(--amiga-light-gray);
+    --muted-foreground: var(--amiga-dark-gray);
+    --accent: var(--amiga-orange);
+    --accent-foreground: var(--amiga-black);
+    --destructive: #FF0000;
+    --destructive-foreground: var(--amiga-white);
+    --border: var(--amiga-dark-gray);
+    --input: var(--amiga-white);
+    --ring: var(--amiga-blue);
+    --radius: 0px; /* Sharp rectangular elements */
+  }
 }
 
-/* You can add any other global custom CSS here */
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer components {
+  /* AmigaOS Workbench Styling */
+  .amiga-font {
+    font-family: 'MS Sans Serif', 'Microsoft Sans Serif', 'Topaz-8', monospace;
+    font-size: 11px;
+    font-weight: normal;
+  }
+
+  .amiga-window {
+    background: var(--amiga-light-gray);
+    border: 2px outset var(--amiga-light-gray);
+    box-shadow: 
+      2px 2px 0px var(--amiga-black),
+      inset 1px 1px 0px var(--amiga-white);
+  }
+
+  .amiga-titlebar {
+    background: linear-gradient(to bottom, var(--amiga-blue) 0%, var(--amiga-blue-dark) 100%);
+    color: var(--amiga-white);
+    padding: 4px 8px;
+    font-weight: bold;
+    text-shadow: 1px 1px 0px var(--amiga-black);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 20px;
+  }
+
+  .amiga-gadget {
+    width: 16px;
+    height: 16px;
+    background: var(--amiga-light-gray);
+    border: 2px outset var(--amiga-light-gray);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    color: var(--amiga-black);
+  }
+
+  .amiga-gadget:hover {
+    background: var(--amiga-medium-gray);
+  }
+
+  .amiga-gadget:active {
+    border: 2px inset var(--amiga-light-gray);
+  }
+
+  .amiga-button {
+    background: linear-gradient(to bottom, var(--amiga-light-gray) 0%, var(--amiga-medium-gray) 100%);
+    border: 2px outset var(--amiga-light-gray);
+    color: var(--amiga-black);
+    padding: 4px 8px;
+    font-family: 'MS Sans Serif', 'Microsoft Sans Serif', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    min-height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .amiga-button:hover {
+    background: linear-gradient(to bottom, var(--amiga-medium-gray) 0%, var(--amiga-light-gray) 100%);
+  }
+
+  .amiga-button:active {
+    border: 2px inset var(--amiga-light-gray);
+    background: var(--amiga-medium-gray);
+  }
+
+  .amiga-button.primary {
+    background: linear-gradient(to bottom, var(--amiga-blue) 0%, var(--amiga-blue-dark) 100%);
+    color: var(--amiga-white);
+    border: 2px outset var(--amiga-blue);
+  }
+
+  .amiga-button.primary:hover {
+    background: linear-gradient(to bottom, var(--amiga-blue-dark) 0%, var(--amiga-blue) 100%);
+  }
+
+  .amiga-input {
+    background: var(--amiga-white);
+    border: 2px inset var(--amiga-light-gray);
+    padding: 4px 6px;
+    font-family: 'MS Sans Serif', 'Microsoft Sans Serif', monospace;
+    font-size: 11px;
+    color: var(--amiga-black);
+  }
+
+  .amiga-input:focus {
+    outline: 2px solid var(--amiga-blue);
+    outline-offset: -2px;
+  }
+
+  .amiga-card {
+    background: var(--amiga-white);
+    border: 2px outset var(--amiga-light-gray);
+    box-shadow: 
+      2px 2px 0px var(--amiga-black),
+      inset 1px 1px 0px var(--amiga-white);
+  }
+
+  .amiga-tabs {
+    background: var(--amiga-light-gray);
+    border: 2px outset var(--amiga-light-gray);
+    padding: 2px;
+  }
+
+  .amiga-tab {
+    background: var(--amiga-medium-gray);
+    border: 2px outset var(--amiga-medium-gray);
+    color: var(--amiga-black);
+    padding: 4px 8px;
+    font-family: 'MS Sans Serif', 'Microsoft Sans Serif', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    margin-right: 2px;
+  }
+
+  .amiga-tab.active {
+    background: var(--amiga-white);
+    border: 2px inset var(--amiga-medium-gray);
+  }
+
+  .amiga-tab:hover {
+    background: var(--amiga-light-gray);
+  }
+
+  /* Checkerboard background pattern */
+  .amiga-pattern {
+    background-image: 
+      linear-gradient(45deg, var(--amiga-medium-gray) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--amiga-medium-gray) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--amiga-medium-gray) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--amiga-medium-gray) 75%);
+    background-size: 4px 4px;
+    background-position: 0 0, 0 2px, 2px -2px, -2px 0px;
+  }
+
+  /* AmigaOS-style scrollbar */
+  .amiga-scrollbar {
+    background: var(--amiga-light-gray);
+    border: 2px outset var(--amiga-light-gray);
+  }
+
+  .amiga-scrollbar-thumb {
+    background: var(--amiga-medium-gray);
+    border: 1px solid var(--amiga-dark-gray);
+  }
+
+  /* Status message styling */
+  .amiga-status {
+    background: var(--amiga-white);
+    border: 2px outset var(--amiga-light-gray);
+    padding: 6px 8px;
+    font-family: 'MS Sans Serif', 'Microsoft Sans Serif', monospace;
+    font-size: 11px;
+    color: var(--amiga-black);
+  }
+
+  .amiga-status.success {
+    border-left: 4px solid #00AA00;
+  }
+
+  .amiga-status.error {
+    border-left: 4px solid #FF0000;
+  }
+
+  .amiga-status.info {
+    border-left: 4px solid var(--amiga-blue);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Chart.js customizations */
+.chart-container {
+  position: relative;
+  height: 400px;
+  width: 100%;
+}
+
+/* Loading animations */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Responsive design improvements */
+@media (max-width: 640px) {
+  .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* Focus styles for accessibility */
+.focus-visible:focus {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* Custom button variants */
+.btn-gradient {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.btn-gradient:hover {
+  background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+/* AmigaOS-style range input */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 12px;
+  border: 2px inset var(--amiga-light-gray);
+  background: var(--amiga-white);
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--amiga-light-gray);
+  border: 2px outset var(--amiga-light-gray);
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  background: var(--amiga-medium-gray);
+}
+
+input[type="range"]::-webkit-slider-thumb:active {
+  border: 2px inset var(--amiga-light-gray);
+  background: var(--amiga-medium-gray);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--amiga-light-gray);
+  border: 2px outset var(--amiga-light-gray);
+  cursor: pointer;
+}
+
+input[type="range"]::-moz-range-thumb:hover {
+  background: var(--amiga-medium-gray);
+}
+
+input[type="range"]::-moz-range-thumb:active {
+  border: 2px inset var(--amiga-light-gray);
+  background: var(--amiga-medium-gray);
+}
+
+input[type="range"]::-moz-range-track {
+  border: 2px inset var(--amiga-light-gray);
+  height: 12px;
+  background: var(--amiga-white);
+}
