@@ -1,0 +1,11 @@
+/* Path: src/index.css */
+
+/* Import Google Fonts - Inter is used in the app */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+/* Apply Inter font to the body */
+body {
+    font-family: 'Inter', sans-serif;
+}
+
+/* You can add any other global custom CSS here */
