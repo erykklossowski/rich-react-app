@@ -324,7 +324,7 @@ VWAP Discharge Price: €${result.vwapDischarge.toFixed(2)}/MWh
 Based on these metrics, what are the key takeaways? Suggest 1-3 actionable strategies or areas for further investigation to improve profitability or operational effectiveness. Keep the response under 200 words.`
 
     try {
-      const response = await fetch('http://localhost:3001/api/gemini-insights', {
+      const response = await fetch('/api/gemini-insights', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt })
