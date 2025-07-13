@@ -16,6 +16,7 @@ import {
   Table
 } from 'lucide-react'
 import { formatCurrency, formatNumber, formatDate } from '../lib/utils'
+import { cn } from '../lib/utils'
 import { Line, Bar } from 'react-chartjs-2'
 
 const BacktestSummary = ({ backtestResults, onShowPeriodDetail }) => {
@@ -246,85 +247,90 @@ const BacktestSummary = ({ backtestResults, onShowPeriodDetail }) => {
         </p>
       </div>
 
-      {/* Results Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Table className="h-5 w-5" />
-            Period Performance
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th 
-                    className="text-left p-3 cursor-pointer hover:bg-gray-50"
-                    onClick={() => handleSort('period')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Period
-                      <SortIcon field="period" />
-                    </div>
-                  </th>
-                  <th 
-                    className="text-left p-3 cursor-pointer hover:bg-gray-50"
-                    onClick={() => handleSort('totalRevenue')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Revenue (€)
-                      <SortIcon field="totalRevenue" />
-                    </div>
-                  </th>
-                  <th 
-                    className="text-left p-3 cursor-pointer hover:bg-gray-50"
-                    onClick={() => handleSort('totalEnergyDischarged')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Energy (MWh)
-                      <SortIcon field="totalEnergyDischarged" />
-                    </div>
-                  </th>
-                  <th 
-                    className="text-left p-3 cursor-pointer hover:bg-gray-50"
-                    onClick={() => handleSort('avgPrice')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Avg Price (€/MWh)
-                      <SortIcon field="avgPrice" />
-                    </div>
-                  </th>
-                  <th className="text-left p-3">Data Points</th>
-                  <th className="text-left p-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredResults.map((r, index) => (
-                  <tr 
-                    key={index} 
-                    className="border-b hover:bg-gray-50 cursor-pointer"
-                    onClick={() => onShowPeriodDetail(r.period)}
-                  >
-                    <td className="p-3 font-medium">{r.period}</td>
-                    <td className={`p-3 ${r.totalRevenue > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {formatCurrency(r.totalRevenue)}
-                    </td>
-                    <td className="p-3">{formatNumber(r.totalEnergyDischarged)}</td>
-                    <td className="p-3">{formatCurrency(r.avgPrice)}</td>
-                    <td className="p-3">{r.dataPoints}</td>
-                    <td className="p-3">
-                      <Button variant="ghost" size="sm">
-                        <ArrowRight className="h-4 w-4" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* Period Icons Grid - AmigaOS Style */}
+      <div className="amiga-window">
+        <div className="amiga-titlebar">
+          <span>Period Analysis Icons</span>
+          <div className="amiga-gadget">×</div>
+        </div>
+        <div className="p-4">
+          {/* Controls */}
+          <div className="flex items-center gap-4 mb-4">
+            <button
+              className={cn(
+                "amiga-button text-xs",
+                filterProfitable && "primary"
+              )}
+              onClick={() => setFilterProfitable(!filterProfitable)}
+            >
+              <Filter className="h-3 w-3 mr-1" />
+              Profitable Only
+            </button>
+            <span className="text-xs text-[#555555]">
+              Click icons to view detailed analysis
+            </span>
           </div>
-        </CardContent>
-      </Card>
+
+          {/* Icon Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {filteredResults.map((r, index) => (
+              <motion.div
+                key={index}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="amiga-icon cursor-pointer"
+                onClick={() => onShowPeriodDetail(r.period)}
+              >
+                <div className={cn(
+                  "amiga-icon-bg p-3 text-center border-2 outset",
+                  r.totalRevenue > 0 
+                    ? "border-[#00AA00] bg-gradient-to-b from-[#00CC00] to-[#008800]" 
+                    : "border-[#AA0000] bg-gradient-to-b from-[#CC0000] to-[#880000]"
+                )}>
+                  <div className="text-white mb-2">
+                    {r.totalRevenue > 0 ? (
+                      <TrendingUp className="h-6 w-6 mx-auto" />
+                    ) : (
+                      <BarChart3 className="h-6 w-6 mx-auto" />
+                    )}
+                  </div>
+                  <div className="text-xs font-bold text-white">
+                    {r.period}
+                  </div>
+                </div>
+                <div className="amiga-icon-label text-xs text-center mt-1 px-1">
+                  <div className="font-bold">
+                    {formatCurrency(r.totalRevenue)}
+                  </div>
+                  <div className="text-[#555555]">
+                    {formatNumber(r.totalEnergyDischarged)} MWh
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Summary Stats */}
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="amiga-window p-2">
+              <div className="text-xs font-bold text-[#0055AA]">Total Revenue</div>
+              <div className="text-xs">{formatCurrency(totalRevenue)}</div>
+            </div>
+            <div className="amiga-window p-2">
+              <div className="text-xs font-bold text-[#0055AA]">Avg Revenue</div>
+              <div className="text-xs">{formatCurrency(avgRevenue)}</div>
+            </div>
+            <div className="amiga-window p-2">
+              <div className="text-xs font-bold text-[#0055AA]">Profitable</div>
+              <div className="text-xs">{profitablePeriods}/{results.length}</div>
+            </div>
+            <div className="amiga-window p-2">
+              <div className="text-xs font-bold text-[#0055AA]">Total Energy</div>
+              <div className="text-xs">{formatNumber(totalEnergy / 1000, 1)} GWh</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </motion.div>
   )
 }

@@ -383,48 +383,50 @@ Based on these metrics, what are the key takeaways? Suggest 1-3 actionable strat
   }
 
   return (
-    <div className="min-h-screen amiga-pattern amiga-font">
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-8"
-        >
-          <div className="amiga-window p-6 mb-4">
-            <div className="amiga-titlebar">
-              <span>Battery Energy Storage Optimization</span>
-              <div className="amiga-gadget">×</div>
-            </div>
-            <div className="p-4 flex items-center justify-center gap-3">
-              <div className="p-2 bg-gradient-to-b from-[#0055AA] to-[#003388] border-2 outset border-[#0055AA]">
-                <Battery className="h-6 w-6 text-white" />
-              </div>
-              <h1 className="text-2xl font-bold text-[#0055AA]">
-                Battery Energy Storage Optimization
-              </h1>
-            </div>
-            <p className="px-4 pb-4 text-sm text-[#555555]">
-              Advanced battery optimization using Hidden Markov Models and the Viterbi algorithm
-            </p>
-          </div>
-        </motion.div>
-
-        {/* Status Message */}
-        <StatusMessage message={statusMessage} />
-
-        {/* Main Content */}
-        <div className="amiga-window">
+    <div className="min-h-screen amiga-pattern amiga-font p-4">
+      {/* Header Window - Top Center */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-4"
+      >
+        <div className="amiga-window max-w-2xl mx-auto">
           <div className="amiga-titlebar">
-            <span>Optimization Interface</span>
+            <span>Battery Energy Storage Optimization</span>
+            <div className="amiga-gadget">×</div>
+          </div>
+          <div className="p-4 flex items-center justify-center gap-3">
+            <div className="p-2 bg-gradient-to-b from-[#0055AA] to-[#003388] border-2 outset border-[#0055AA]">
+              <Battery className="h-6 w-6 text-white" />
+            </div>
+            <h1 className="text-xl font-bold text-[#0055AA]">
+              Battery Energy Storage Optimization
+            </h1>
+          </div>
+          <p className="px-4 pb-4 text-xs text-[#555555] text-center">
+            Advanced battery optimization using Hidden Markov Models and the Viterbi algorithm
+          </p>
+        </div>
+      </motion.div>
+
+      {/* Status Message */}
+      <StatusMessage message={statusMessage} />
+
+      {/* Main Workbench Layout - Grid of Windows */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+        
+        {/* Tab Navigation Window - Top Left */}
+        <div className="amiga-window lg:col-span-1">
+          <div className="amiga-titlebar">
+            <span>Navigation</span>
             <div className="amiga-gadget">−</div>
           </div>
-          <div className="p-4">
-            <div className="amiga-tabs mb-4">
+          <div className="p-3">
+            <div className="amiga-tabs">
               <button
                 onClick={() => handleTabChange('manual')}
                 className={cn(
-                  "amiga-tab",
+                  "amiga-tab w-full mb-2",
                   activeTab === 'manual' && "active"
                 )}
               >
@@ -434,7 +436,7 @@ Based on these metrics, what are the key takeaways? Suggest 1-3 actionable strat
               <button
                 onClick={() => handleTabChange('backtest')}
                 className={cn(
-                  "amiga-tab",
+                  "amiga-tab w-full",
                   activeTab === 'backtest' && "active"
                 )}
               >
@@ -442,51 +444,102 @@ Based on these metrics, what are the key takeaways? Suggest 1-3 actionable strat
                 Historical Backtest
               </button>
             </div>
-
-            {activeTab === 'manual' && (
-              <div className="space-y-6">
-                <ManualInputForm 
-                  onOptimize={optimizeBattery}
-                  onGenerateSample={generateSampleData}
-                />
-                
-                {optimizationResult && (
-                  <ResultsDashboard 
-                    data={optimizationResult}
-                    isManualInput={true}
-                    onGetInsights={getOptimizationInsight}
-                  />
-                )}
-              </div>
-            )}
-
-            {activeTab === 'backtest' && (
-              <div className="space-y-6">
-                <BacktestForm 
-                  onRunBacktest={runBacktest}
-                  onLoadPresets={loadQuickPresets}
-                  onTestConnection={testDataConnection}
-                />
-                
-                {backtestResults && !detailedPeriod && (
-                  <BacktestSummary 
-                    backtestResults={backtestResults}
-                    onShowPeriodDetail={showPeriodDetail}
-                  />
-                )}
-                
-                {detailedPeriod && (
-                  <ResultsDashboard 
-                    data={detailedPeriod}
-                    isManualInput={false}
-                    onBack={hideDetailedResults}
-                    onGetInsights={getOptimizationInsight}
-                  />
-                )}
-              </div>
-            )}
           </div>
         </div>
+
+        {/* Manual Input Form */}
+        {activeTab === 'manual' && (
+          <div className="lg:col-span-2 xl:col-span-2">
+            <ManualInputForm 
+              onOptimize={optimizeBattery}
+              onGenerateSample={generateSampleData}
+            />
+          </div>
+        )}
+
+        {/* Backtest Form */}
+        {activeTab === 'backtest' && (
+          <div className="lg:col-span-2 xl:col-span-2">
+            <BacktestForm 
+              onRunBacktest={runBacktest}
+              onLoadPresets={loadQuickPresets}
+              onTestConnection={testDataConnection}
+            />
+          </div>
+        )}
+
+        {/* Results Dashboard Window - Spans Multiple Columns */}
+        {optimizationResult && (
+          <div className="amiga-window lg:col-span-2 xl:col-span-2">
+            <div className="amiga-titlebar">
+              <span>Optimization Results</span>
+              <div className="amiga-gadget">×</div>
+            </div>
+            <div className="p-3">
+              <ResultsDashboard 
+                data={optimizationResult}
+                isManualInput={true}
+                onGetInsights={getOptimizationInsight}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Backtest Summary Window */}
+        {backtestResults && !detailedPeriod && (
+          <div className="amiga-window lg:col-span-2 xl:col-span-2">
+            <div className="amiga-titlebar">
+              <span>Backtest Summary</span>
+              <div className="amiga-gadget">×</div>
+            </div>
+            <div className="p-3">
+              <BacktestSummary 
+                backtestResults={backtestResults}
+                onShowPeriodDetail={showPeriodDetail}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Detailed Period Results Window */}
+        {detailedPeriod && (
+          <div className="amiga-window lg:col-span-2 xl:col-span-2">
+            <div className="amiga-titlebar">
+              <span>Detailed Period Analysis</span>
+              <div className="amiga-gadget">×</div>
+            </div>
+            <div className="p-3">
+              <ResultsDashboard 
+                data={detailedPeriod}
+                isManualInput={false}
+                onBack={hideDetailedResults}
+                onGetInsights={getOptimizationInsight}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* AI Insights Window - Bottom Right */}
+        {llmInsight && (
+          <div className="amiga-window lg:col-span-1 xl:col-span-1">
+            <div className="amiga-titlebar">
+              <span>AI Insights</span>
+              <div className="amiga-gadget">×</div>
+            </div>
+            <div className="p-3">
+              <div className="text-xs text-[#555555] leading-relaxed">
+                {llmLoading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin h-4 w-4 border-2 border-[#0055AA] border-t-transparent"></div>
+                    <span>Generating insights...</span>
+                  </div>
+                ) : (
+                  <div className="whitespace-pre-wrap">{llmInsight}</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -34,41 +34,45 @@ const ManualInputForm = ({ onOptimize, onGenerateSample }) => {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
+      className="space-y-4"
     >
-      <div className="amiga-window w-full">
-        <div className="amiga-titlebar">
-          <span>Manual Price Input</span>
-          <div className="amiga-gadget">×</div>
-        </div>
-        <div className="p-4 space-y-6">
-          <div className="flex items-center gap-2 mb-2">
-            <Settings className="h-4 w-4" />
-            <span className="text-sm font-bold">Enter 24-hour electricity prices and configure battery parameters for optimization</span>
+      {/* Two Column Layout */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        
+        {/* Left Column - Price Data */}
+        <div className="amiga-window">
+          <div className="amiga-titlebar">
+            <span>Price Data</span>
+            <div className="amiga-gadget">×</div>
           </div>
-          {/* Price Data Input */}
-          <div className="space-y-2">
-            <label htmlFor="priceData" className="flex items-center gap-2 text-sm font-bold">
+          <div className="p-3">
+            <div className="flex items-center gap-2 mb-2">
               <TrendingUp className="h-4 w-4" />
-              Day-Ahead Electricity Prices (EUR/MWh)
-            </label>
+              <span className="text-xs font-bold">Day-Ahead Electricity Prices</span>
+            </div>
             <textarea
-              id="priceData"
               placeholder="45.2, 38.7, 35.1, 42.8, 55.3, 67.9, 89.4, 95.2, 87.6, 78.3, 65.4, 58.7, 52.1, 49.8, 46.3, 43.9, 48.2, 56.7, 72.8, 89.3, 95.8, 88.4, 76.2, 63.5"
               value={priceData}
               onChange={(e) => setPriceData(e.target.value)}
-              className="amiga-input w-full h-20 resize-none"
+              className="amiga-input w-full h-24 resize-none text-xs"
             />
-            <p className="text-xs text-[#555555]">
-              Enter 24 comma-separated values representing hourly prices
+            <p className="text-xs text-[#555555] mt-1">
+              Enter 24 comma-separated values (EUR/MWh)
             </p>
           </div>
+        </div>
 
-          {/* Battery Parameters */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Right Column - Battery Parameters */}
+        <div className="amiga-window">
+          <div className="amiga-titlebar">
+            <span>Battery Parameters</span>
+            <div className="amiga-gadget">×</div>
+          </div>
+          <div className="p-3 space-y-3">
             {/* Max Power */}
-            <div className="space-y-3">
-              <label className="flex items-center gap-2 text-sm font-bold">
-                <Zap className="h-4 w-4" />
+            <div className="space-y-2">
+              <label className="text-xs font-bold flex items-center gap-1">
+                <Zap className="h-3 w-3" />
                 Max Power: {formatNumber(pMax)} MW
               </label>
               <Slider
@@ -79,17 +83,13 @@ const ManualInputForm = ({ onOptimize, onGenerateSample }) => {
                 step={0.5}
                 className="w-full"
               />
-              <div className="flex justify-between text-xs text-[#555555]">
-                <span>1 MW</span>
-                <span>50 MW</span>
-              </div>
             </div>
 
             {/* Efficiency */}
-            <div className="space-y-3">
-              <label className="flex items-center gap-2 text-sm font-bold">
-                <Battery className="h-4 w-4" />
-                Round-trip Efficiency: {formatNumber(efficiency * 100, 0)}%
+            <div className="space-y-2">
+              <label className="text-xs font-bold flex items-center gap-1">
+                <Battery className="h-3 w-3" />
+                Efficiency: {formatNumber(efficiency * 100, 0)}%
               </label>
               <Slider
                 value={[efficiency]}
@@ -99,55 +99,80 @@ const ManualInputForm = ({ onOptimize, onGenerateSample }) => {
                 step={0.01}
                 className="w-full"
               />
-              <div className="flex justify-between text-xs text-[#555555]">
-                <span>50%</span>
-                <span>100%</span>
-              </div>
             </div>
 
-            {/* Min SoC */}
-            <div className="space-y-3">
-              <label className="flex items-center gap-2 text-sm font-bold">
-                <Battery className="h-4 w-4" />
-                Min SoC: {formatNumber(socMin)} MWh
+            {/* SoC Range - Two Sliders */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold flex items-center gap-1">
+                <Battery className="h-3 w-3" />
+                SoC Range: {formatNumber(socMin)}-{formatNumber(socMax)} MWh
               </label>
-              <Slider
-                value={[socMin]}
-                onValueChange={(value) => handleSliderChange(value, setSocMin)}
-                max={socMax - 1}
-                min={1}
-                step={0.5}
-                className="w-full"
-              />
-              <div className="flex justify-between text-xs text-[#555555]">
-                <span>1 MWh</span>
-                <span>{formatNumber(socMax - 1)} MWh</span>
-              </div>
-            </div>
+              <div className="space-y-3">
+                {/* Max SoC Slider */}
+                <div>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span>Max SoC</span>
+                    <span>{(socMax / pMax).toFixed(1)}x Max Power ({formatNumber(socMax)} MWh)</span>
+                  </div>
+                  <Slider
+                    value={[socMax / pMax]}
+                    onValueChange={(value) => {
+                      const socFactor = value[0]
+                      const newMax = pMax * socFactor
+                      // Adjust min SoC to maintain current DoD percentage
+                      const currentDoDPercent = ((socMax - socMin) / socMax) * 100
+                      const newMin = newMax * (1 - currentDoDPercent / 100)
+                      setSocMin(newMin)
+                      setSocMax(newMax)
+                    }}
+                    max={6}
+                    min={1}
+                    step={0.1}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-xs">
+                    <span>1x ({formatNumber(pMax)} MWh)</span>
+                    <span>6x ({formatNumber(pMax * 6)} MWh)</span>
+                  </div>
+                </div>
 
-            {/* Max SoC */}
-            <div className="space-y-3">
-              <label className="flex items-center gap-2 text-sm font-bold">
-                <Battery className="h-4 w-4" />
-                Max SoC: {formatNumber(socMax)} MWh
-              </label>
-              <Slider
-                value={[socMax]}
-                onValueChange={(value) => handleSliderChange(value, setSocMax)}
-                max={100}
-                min={socMin + 1}
-                step={0.5}
-                className="w-full"
-              />
-              <div className="flex justify-between text-xs text-xs text-[#555555]">
-                <span>{formatNumber(socMin + 1)} MWh</span>
-                <span>100 MWh</span>
+                {/* DoD Slider */}
+                <div>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span>Depth of Discharge</span>
+                    <span>{((socMax - socMin) / socMax * 100).toFixed(1)}% ({formatNumber(socMax - socMin)} MWh)</span>
+                  </div>
+                  <Slider
+                    value={[(socMax - socMin) / socMax * 100]}
+                    onValueChange={(value) => {
+                      const dodPercent = value[0]
+                      const newMin = socMax * (1 - dodPercent / 100)
+                      setSocMin(newMin)
+                    }}
+                    max={50}
+                    min={0}
+                    step={1}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-xs">
+                    <span>0%</span>
+                    <span>50%</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
+        </div>
+      </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-3 pt-4">
+      {/* Action Buttons */}
+      <div className="amiga-window">
+        <div className="amiga-titlebar">
+          <span>Actions</span>
+          <div className="amiga-gadget">×</div>
+        </div>
+        <div className="p-3">
+          <div className="flex gap-3">
             <button
               onClick={onOptimize}
               disabled={loading || !priceData.trim()}
@@ -161,7 +186,7 @@ const ManualInputForm = ({ onOptimize, onGenerateSample }) => {
               ) : (
                 <>
                   <Zap className="h-4 w-4 mr-2" />
-                  Optimize Battery Operation
+                  Optimize Battery
                 </>
               )}
             </button>
@@ -170,7 +195,7 @@ const ManualInputForm = ({ onOptimize, onGenerateSample }) => {
               className="amiga-button flex-1"
             >
               <TrendingUp className="h-4 w-4 mr-2" />
-              Generate Sample Data
+              Generate Sample
             </button>
           </div>
         </div>

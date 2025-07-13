@@ -221,6 +221,34 @@
   .amiga-status.info {
     border-left: 4px solid var(--amiga-blue);
   }
+
+  /* AmigaOS-style icons */
+  .amiga-icon {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .amiga-icon-bg {
+    width: 64px;
+    height: 64px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 4px;
+  }
+
+  .amiga-icon-label {
+    max-width: 80px;
+    word-wrap: break-word;
+    text-align: center;
+    font-family: 'MS Sans Serif', 'Microsoft Sans Serif', monospace;
+    font-size: 10px;
+    line-height: 1.2;
+  }
 }
 
 /* Custom scrollbar */

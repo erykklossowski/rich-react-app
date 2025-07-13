@@ -49,231 +49,232 @@ const BacktestForm = ({ onRunBacktest, onLoadPresets, onTestConnection }) => {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
+      className="space-y-4"
     >
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Database className="h-6 w-6" />
-            Historical Backtesting
-          </CardTitle>
-          <CardDescription>
-            Analyze battery performance using historical Polish electricity market data
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Data Source Info */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-start gap-3">
-              <Database className="h-5 w-5 text-blue-600 mt-0.5" />
-              <div>
-                <h4 className="font-semibold text-blue-900">Polish Electricity Market Dataset</h4>
-                <p className="text-sm text-blue-700 mt-1">
-                  <strong>Period:</strong> January 2015 - June 2025 (91,790 hourly records)<br />
-                  <strong>Price Range:</strong> -132.95 to 771.00 EUR/MWh<br />
-                  <strong>Average Price:</strong> 73.72 EUR/MWh
-                </p>
-              </div>
+      {/* Three Column Layout */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        
+        {/* Left Column - Dataset Info */}
+        <div className="amiga-window">
+          <div className="amiga-titlebar">
+            <span>Dataset</span>
+            <div className="amiga-gadget">×</div>
+          </div>
+          <div className="p-3">
+            <div className="flex items-start gap-2 mb-2">
+              <Database className="h-4 w-4 mt-0.5" />
+              <span className="text-xs font-bold">Polish Electricity Market</span>
+            </div>
+            <div className="text-xs text-[#555555] space-y-1">
+              <div><strong>Period:</strong> 2015-2025</div>
+              <div><strong>Records:</strong> 91,790 hourly</div>
+              <div><strong>Price Range:</strong> -133 to 771 €/MWh</div>
+              <div><strong>Average:</strong> 73.72 €/MWh</div>
             </div>
           </div>
+        </div>
 
-          {/* Date Range Selection */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Middle Column - Parameters */}
+        <div className="amiga-window">
+          <div className="amiga-titlebar">
+            <span>Parameters</span>
+            <div className="amiga-gadget">×</div>
+          </div>
+          <div className="p-3 space-y-3">
+            {/* Date Range */}
             <div className="space-y-2">
-              <Label htmlFor="startDate" className="flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                Start Date
-              </Label>
-              <Input
-                id="startDate"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                min="2015-01-01"
-                max="2025-06-21"
-              />
+              <label className="text-xs font-bold flex items-center gap-1">
+                <Calendar className="h-3 w-3" />
+                Date Range
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  min="2015-01-01"
+                  max="2025-06-21"
+                  className="amiga-input text-xs"
+                />
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  min="2015-01-01"
+                  max="2025-06-21"
+                  className="amiga-input text-xs"
+                />
+              </div>
             </div>
+
+            {/* Analysis Type */}
             <div className="space-y-2">
-              <Label htmlFor="endDate" className="flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                End Date
-              </Label>
-              <Input
-                id="endDate"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                min="2015-01-01"
-                max="2025-06-21"
-              />
+              <label className="text-xs font-bold flex items-center gap-1">
+                <Settings className="h-3 w-3" />
+                Analysis Type
+              </label>
+              <select
+                value={analysisType}
+                onChange={(e) => setAnalysisType(e.target.value)}
+                className="amiga-input text-xs w-full"
+              >
+                {analysisTypes.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
             </div>
-          </div>
 
-          {/* Analysis Type */}
-          <div className="space-y-2">
-            <Label htmlFor="analysisType" className="flex items-center gap-2">
-              <Settings className="h-4 w-4" />
-              Analysis Type
-            </Label>
-            <select
-              id="analysisType"
-              value={analysisType}
-              onChange={(e) => setAnalysisType(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            >
-              {analysisTypes.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Battery Parameters */}
-          <div className="space-y-4">
-            <h4 className="font-semibold flex items-center gap-2">
-              <Battery className="h-4 w-4" />
-              Battery Parameters
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Max Power */}
-              <div className="space-y-3">
-                <Label className="flex items-center gap-2">
-                  <Zap className="h-4 w-4" />
-                  Max Power: {formatNumber(backtestParams.pMax)} MW
-                </Label>
-                <Slider
-                  value={[backtestParams.pMax]}
-                  onValueChange={(value) => handleSliderChange(value, 'pMax')}
-                  max={50}
-                  min={1}
-                  step={0.5}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>1 MW</span>
-                  <span>50 MW</span>
-                </div>
+            {/* Battery Parameters - Compact */}
+            <div className="space-y-2">
+              <div className="text-xs font-bold flex items-center gap-1">
+                <Battery className="h-3 w-3" />
+                Battery Settings
               </div>
-
-              {/* Efficiency */}
-              <div className="space-y-3">
-                <Label className="flex items-center gap-2">
-                  <Battery className="h-4 w-4" />
-                  Round-trip Efficiency: {formatNumber(backtestParams.efficiency * 100, 0)}%
-                </Label>
-                <Slider
-                  value={[backtestParams.efficiency]}
-                  onValueChange={(value) => handleSliderChange(value, 'efficiency')}
-                  max={1}
-                  min={0.5}
-                  step={0.01}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>50%</span>
-                  <span>100%</span>
+              <div className="space-y-2">
+                <div>
+                  <label className="text-xs">Power: {formatNumber(backtestParams.pMax)} MW</label>
+                  <Slider
+                    value={[backtestParams.pMax]}
+                    onValueChange={(value) => handleSliderChange(value, 'pMax')}
+                    max={50}
+                    min={1}
+                    step={0.5}
+                    className="w-full"
+                  />
                 </div>
-              </div>
-
-              {/* Min SoC */}
-              <div className="space-y-3">
-                <Label className="flex items-center gap-2">
-                  <Battery className="h-4 w-4" />
-                  Min SoC: {formatNumber(backtestParams.socMin)} MWh
-                </Label>
-                <Slider
-                  value={[backtestParams.socMin]}
-                  onValueChange={(value) => handleSliderChange(value, 'socMin')}
-                  max={backtestParams.socMax - 1}
-                  min={1}
-                  step={0.5}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>1 MWh</span>
-                  <span>{formatNumber(backtestParams.socMax - 1)} MWh</span>
+                <div>
+                  <label className="text-xs">Efficiency: {formatNumber(backtestParams.efficiency * 100, 0)}%</label>
+                  <Slider
+                    value={[backtestParams.efficiency]}
+                    onValueChange={(value) => handleSliderChange(value, 'efficiency')}
+                    max={1}
+                    min={0.5}
+                    step={0.01}
+                    className="w-full"
+                  />
                 </div>
-              </div>
+                <div>
+                  <label className="text-xs">SoC Range: {formatNumber(backtestParams.socMin)}-{formatNumber(backtestParams.socMax)} MWh</label>
+                  <div className="space-y-3">
+                    {/* Max SoC Slider */}
+                    <div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span>Max SoC</span>
+                        <span>{(backtestParams.socMax / backtestParams.pMax).toFixed(1)}x Max Power ({formatNumber(backtestParams.socMax)} MWh)</span>
+                      </div>
+                      <Slider
+                        value={[backtestParams.socMax / backtestParams.pMax]}
+                        onValueChange={(value) => {
+                          const socFactor = value[0]
+                          const newMax = backtestParams.pMax * socFactor
+                          // Adjust min SoC to maintain current DoD percentage
+                          const currentDoDPercent = ((backtestParams.socMax - backtestParams.socMin) / backtestParams.socMax) * 100
+                          const newMin = newMax * (1 - currentDoDPercent / 100)
+                          handleSliderChange([newMin], 'socMin')
+                          handleSliderChange([newMax], 'socMax')
+                        }}
+                        max={6}
+                        min={1}
+                        step={0.1}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs">
+                        <span>1x ({formatNumber(backtestParams.pMax)} MWh)</span>
+                        <span>6x ({formatNumber(backtestParams.pMax * 6)} MWh)</span>
+                      </div>
+                    </div>
 
-              {/* Max SoC */}
-              <div className="space-y-3">
-                <Label className="flex items-center gap-2">
-                  <Battery className="h-4 w-4" />
-                  Max SoC: {formatNumber(backtestParams.socMax)} MWh
-                </Label>
-                <Slider
-                  value={[backtestParams.socMax]}
-                  onValueChange={(value) => handleSliderChange(value, 'socMax')}
-                  max={100}
-                  min={backtestParams.socMin + 1}
-                  step={0.5}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>{formatNumber(backtestParams.socMin + 1)} MWh</span>
-                  <span>100 MWh</span>
+                    {/* DoD Slider */}
+                    <div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span>Depth of Discharge</span>
+                        <span>{((backtestParams.socMax - backtestParams.socMin) / backtestParams.socMax * 100).toFixed(1)}% ({formatNumber(backtestParams.socMax - backtestParams.socMin)} MWh)</span>
+                      </div>
+                      <Slider
+                        value={[(backtestParams.socMax - backtestParams.socMin) / backtestParams.socMax * 100]}
+                        onValueChange={(value) => {
+                          const dodPercent = value[0]
+                          const newMin = backtestParams.socMax * (1 - dodPercent / 100)
+                          handleSliderChange([newMin], 'socMin')
+                        }}
+                        max={50}
+                        min={0}
+                        step={1}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs">
+                        <span>0%</span>
+                        <span>50%</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-3 pt-4">
-            <Button
+        {/* Right Column - Actions */}
+        <div className="amiga-window">
+          <div className="amiga-titlebar">
+            <span>Actions</span>
+            <div className="amiga-gadget">×</div>
+          </div>
+          <div className="p-3 space-y-3">
+            <button
               onClick={onRunBacktest}
               disabled={loading}
-              className="flex-1"
-              size="lg"
+              className="amiga-button primary w-full"
             >
               {loading ? (
                 <>
-                  <div className="animate-spin h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full" />
-                  Running Backtest...
+                  <div className="animate-spin h-4 w-4 mr-2 border-2 border-white border-t-transparent" />
+                  Running...
                 </>
               ) : (
                 <>
                   <Play className="h-4 w-4 mr-2" />
-                  Run Historical Backtest
+                  Run Backtest
                 </>
               )}
-            </Button>
-            <Button
+            </button>
+            <button
               onClick={onLoadPresets}
-              variant="outline"
-              size="lg"
+              className="amiga-button w-full"
             >
               <RotateCcw className="h-4 w-4 mr-2" />
               Load Presets
-            </Button>
-            <Button
+            </button>
+            <button
               onClick={onTestConnection}
-              variant="outline"
-              size="lg"
+              className="amiga-button w-full"
             >
               <Wifi className="h-4 w-4 mr-2" />
               Test Connection
-            </Button>
-          </div>
+            </button>
 
-          {/* Progress Bar */}
-          {loading && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">{progressText}</span>
-                <span className="font-medium">{Math.round(progress)}%</span>
+            {/* Progress Bar */}
+            {loading && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[#555555]">{progressText}</span>
+                  <span className="font-medium">{Math.round(progress)}%</span>
+                </div>
+                <div className="w-full bg-[#AAAAAA] border-2 inset border-[#AAAAAA] h-2">
+                  <motion.div
+                    className="bg-[#0055AA] h-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progress}%` }}
+                    transition={{ duration: 0.3 }}
+                  />
+                </div>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <motion.div
-                  className="bg-gradient-to-r from-blue-500 to-indigo-600 h-2 rounded-full"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progress}%` }}
-                  transition={{ duration: 0.3 }}
-                />
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            )}
+          </div>
+        </div>
+      </div>
     </motion.div>
   )
 }

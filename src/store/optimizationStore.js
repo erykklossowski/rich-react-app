@@ -7,15 +7,15 @@ export const useOptimizationStore = create(
       // Manual input state
       priceData: '',
       pMax: 10,
-      socMin: 8,
-      socMax: 40,
+      socMin: 10, // 1x Max Power
+      socMax: 40, // 4x Max Power
       efficiency: 0.85,
 
       // Backtest state
       startDate: '2020-01-01',
       endDate: '2020-12-31',
       analysisType: 'monthly',
-      backtestParams: { pMax: 10, socMin: 8, socMax: 40, efficiency: 0.85 },
+      backtestParams: { pMax: 10, socMin: 10, socMax: 40, efficiency: 0.85 }, // 1x to 4x Max Power
 
       // Results state
       optimizationResult: null,
@@ -38,7 +38,20 @@ export const useOptimizationStore = create(
 
       // Actions
       setPriceData: (data) => set({ priceData: data }),
-      setPMax: (value) => set({ pMax: value }),
+      setPMax: (value) => set((state) => {
+        // Update SoC values to maintain consistency with new pMax
+        const currentMaxFactor = state.socMax / state.pMax
+        const currentDoDPercent = ((state.socMax - state.socMin) / state.socMax) * 100
+        
+        const newSocMax = value * currentMaxFactor
+        const newSocMin = newSocMax * (1 - currentDoDPercent / 100)
+        
+        return { 
+          pMax: value,
+          socMin: newSocMin,
+          socMax: newSocMax
+        }
+      }),
       setSocMin: (value) => set({ socMin: value }),
       setSocMax: (value) => set({ socMax: value }),
       setEfficiency: (value) => set({ efficiency: value }),
@@ -72,9 +85,22 @@ export const useOptimizationStore = create(
         statusMessage: { type: '', text: '' }
       }),
 
-      updateBacktestParams: (updates) => set((state) => ({
-        backtestParams: { ...state.backtestParams, ...updates }
-      })),
+      updateBacktestParams: (updates) => set((state) => {
+        const newParams = { ...state.backtestParams, ...updates }
+        
+        // If pMax is being updated, adjust SoC values accordingly
+        if (updates.pMax !== undefined) {
+          const currentMaxFactor = state.backtestParams.socMax / state.backtestParams.pMax
+          const currentDoDPercent = ((state.backtestParams.socMax - state.backtestParams.socMin) / state.backtestParams.socMax) * 100
+          
+          newParams.socMax = updates.pMax * currentMaxFactor
+          newParams.socMin = newParams.socMax * (1 - currentDoDPercent / 100)
+        }
+        
+        return {
+          backtestParams: newParams
+        }
+      }),
 
       // Computed values
       getParams: () => {
