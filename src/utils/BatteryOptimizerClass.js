@@ -149,16 +149,16 @@ class BatteryOptimizer {
 
         if (T === 0) return schedule;
 
-        let currentSoC = params.socMin; // Start with minimum SoC
+        // Start at a more balanced SoC level to enable full range utilization
+        let currentSoC = (params.socMin + params.socMax) / 2; // Start at middle of range
         schedule.soc[0] = currentSoC;
 
         const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
-        const priceStd = Math.sqrt(prices.reduce((sum, p) => sum + Math.pow(p - avgPrice, 2), 0) / prices.length);
-
+        
         // Calculate price percentiles for more dynamic thresholds
         const sortedPrices = [...prices].sort((a, b) => a - b);
-        const lowPriceThreshold = sortedPrices[Math.floor(sortedPrices.length * 0.25)]; // 25th percentile
-        const highPriceThreshold = sortedPrices[Math.floor(sortedPrices.length * 0.75)]; // 75th percentile
+        const lowPriceThreshold = sortedPrices[Math.floor(sortedPrices.length * 0.3)]; // 30th percentile
+        const highPriceThreshold = sortedPrices[Math.floor(sortedPrices.length * 0.7)]; // 70th percentile
 
         for (let t = 0; t < T; t++) {
             const state = viterbiPath[t]; // HMM predicted state for current hour
@@ -172,93 +172,97 @@ class BatteryOptimizer {
             const isHighPrice = price >= highPriceThreshold;
             const isMediumPrice = price > lowPriceThreshold && price < highPriceThreshold;
             
-            // Minimal buffers to use full SoC range
-            const canCharge = currentSoC < params.socMax - 0.01;
-            const canDischarge = currentSoC > params.socMin + 0.01;
+            // Very minimal buffers to use full SoC range
+            const canCharge = currentSoC < params.socMax - 0.001;
+            const canDischarge = currentSoC > params.socMin + 0.001;
 
-            // Aggressive state-based decision logic to maximize SoC range utilization
+            // Calculate SoC utilization and price advantage
             const socUtilization = (currentSoC - params.socMin) / (params.socMax - params.socMin);
-            const priceRatio = price / avgPrice;
+            const priceAdvantage = (avgPrice - price) / avgPrice; // Positive = good for charging
             
-            // State-based decision logic with aggressive SoC range utilization
+            // Force aggressive utilization of full SoC range
             if (state === 1 && (isLowPrice || isMediumPrice) && canCharge) {
-                // Charge aggressively on low/medium prices when in low price state
+                // Charge aggressively in low price state
                 const maxCharge = Math.min(
-                    params.pMax, // Limited by max power
-                    (params.socMax - currentSoC) / params.efficiency // Limited by remaining capacity and efficiency
+                    params.pMax,
+                    (params.socMax - currentSoC) / params.efficiency
                 );
                 
-                // Aggressive charging: Use 90-100% of available capacity
+                // Force charging to reach max SoC
                 let chargeFactor = 1.0;
                 if (isLowPrice) {
                     chargeFactor = 1.0; // Full capacity on low prices
+                } else if (currentSoC < params.socMax * 0.8) {
+                    chargeFactor = 0.9; // Aggressive charging when below 80%
                 } else {
-                    chargeFactor = Math.min(1.0, 0.9 + (0.1 * (1 - socUtilization))); // 90-100% based on SoC
+                    chargeFactor = 0.7; // Moderate charging when near max
                 }
                 
                 charge = maxCharge * chargeFactor;
                 currentSoC += charge * params.efficiency;
                 action = 'charge';
             } else if (state === 3 && (isHighPrice || isMediumPrice) && canDischarge) {
-                // Discharge aggressively on high/medium prices when in high price state
+                // Discharge aggressively in high price state
                 const maxDischarge = Math.min(
-                    params.pMax, // Limited by max power
-                    currentSoC - params.socMin // Limited by available energy
+                    params.pMax,
+                    currentSoC - params.socMin
                 );
                 
-                // Aggressive discharging: Use 90-100% of available capacity
+                // Force discharging to reach min SoC
                 let dischargeFactor = 1.0;
                 if (isHighPrice) {
                     dischargeFactor = 1.0; // Full capacity on high prices
+                } else if (currentSoC > params.socMax * 0.2) {
+                    dischargeFactor = 0.9; // Aggressive discharging when above 20%
                 } else {
-                    dischargeFactor = Math.min(1.0, 0.9 + (0.1 * socUtilization)); // 90-100% based on SoC
+                    dischargeFactor = 0.7; // Moderate discharging when near min
                 }
                 
                 discharge = maxDischarge * dischargeFactor;
                 currentSoC -= discharge;
                 action = 'discharge';
-            } else if (state === 2 && isHighPrice && canDischarge) {
-                // Discharge on high prices when in medium price state
-                const maxDischarge = Math.min(
-                    params.pMax,
-                    currentSoC - params.socMin
-                );
-                
-                // Aggressive discharging in medium state on high prices
-                const dischargeFactor = Math.min(1.0, 0.8 + (0.2 * socUtilization));
-                discharge = maxDischarge * dischargeFactor;
-                currentSoC -= discharge;
-                action = 'discharge';
-            } else if (state === 2 && isLowPrice && canCharge) {
-                // Charge on low prices when in medium price state
-                const maxCharge = Math.min(
-                    params.pMax,
-                    (params.socMax - currentSoC) / params.efficiency
-                );
-                
-                // Aggressive charging in medium state on low prices
-                const chargeFactor = Math.min(1.0, 0.8 + (0.2 * (1 - socUtilization)));
-                charge = maxCharge * chargeFactor;
-                currentSoC += charge * params.efficiency;
-                action = 'charge';
-            } else if (state === 2 && isMediumPrice && canCharge && currentSoC < params.socMax * 0.7) {
-                // Charge on medium prices when in medium state and SoC is low
-                const maxCharge = Math.min(
-                    params.pMax * 0.8, // Use 80% of max power
-                    (params.socMax - currentSoC) / params.efficiency
-                );
-                charge = maxCharge * 0.9; // Use 90% of available capacity
-                currentSoC += charge * params.efficiency;
-                action = 'charge';
-            } else if (state === 2 && isMediumPrice && canDischarge && currentSoC > params.socMax * 0.3) {
-                // Discharge on medium prices when in medium state and SoC is high
-                const maxDischarge = Math.min(
-                    params.pMax * 0.8, // Use 80% of max power
-                    currentSoC - params.socMin
-                );
-                discharge = maxDischarge * 0.9; // Use 90% of available capacity
-                currentSoC -= discharge;
-                action = 'discharge';
+            } else if (state === 2) {
+                // Medium state: be opportunistic based on price and SoC
+                if (isHighPrice && canDischarge && currentSoC > params.socMax * 0.3) {
+                    // Discharge on high prices if SoC is above 30%
+                    const maxDischarge = Math.min(
+                        params.pMax * 0.8,
+                        currentSoC - params.socMin
+                    );
+                    discharge = maxDischarge * 0.8;
+                    currentSoC -= discharge;
+                    action = 'discharge';
+                } else if (isLowPrice && canCharge && currentSoC < params.socMax * 0.7) {
+                    // Charge on low prices if SoC is below 70%
+                    const maxCharge = Math.min(
+                        params.pMax * 0.8,
+                        (params.socMax - currentSoC) / params.efficiency
+                    );
+                    charge = maxCharge * 0.8;
+                    currentSoC += charge * params.efficiency;
+                    action = 'charge';
+                } else if (isMediumPrice) {
+                    // On medium prices, balance SoC towards middle
+                    if (currentSoC > params.socMax * 0.6 && canDischarge) {
+                        // Discharge if too high
+                        const maxDischarge = Math.min(
+                            params.pMax * 0.6,
+                            currentSoC - params.socMin
+                        );
+                        discharge = maxDischarge * 0.6;
+                        currentSoC -= discharge;
+                        action = 'discharge';
+                    } else if (currentSoC < params.socMax * 0.4 && canCharge) {
+                        // Charge if too low
+                        const maxCharge = Math.min(
+                            params.pMax * 0.6,
+                            (params.socMax - currentSoC) / params.efficiency
+                        );
+                        charge = maxCharge * 0.6;
+                        currentSoC += charge * params.efficiency;
+                        action = 'charge';
+                    }
+                }
             }
 
             // Store calculated values for the current hour.
