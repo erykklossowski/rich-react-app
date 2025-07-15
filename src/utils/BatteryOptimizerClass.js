@@ -163,12 +163,18 @@ class BatteryOptimizer {
         // Constrained optimization parameters
         const penaltyWeight = 1e6; // Penalty for violating state constraints
         const utilizationWeight = 1e4; // Weight for utilization incentives
-        const maxIterations = 1000;
-        const learningRate = 0.01;
+        const socPenaltyWeight = 1e8; // Much stronger penalty for SoC violations
+        const maxIterations = 2000; // More iterations for better convergence
+        const learningRate = 0.005; // Smaller learning rate for stability
 
         // Initialize variables - start at middle to enable full range utilization
         let pCharge = Array(T).fill(0);
         let pDischarge = Array(T).fill(0);
+
+        // Calculate price statistics for better decision making
+        const avgPrice = prices.reduce((sum, p) => sum + p, 0) / prices.length;
+        const priceThreshold = avgPrice * 0.6; // More conservative threshold
+        const highPriceThreshold = avgPrice * 1.4; // Threshold for high prices
 
         // Gradient descent optimization
         for (let iteration = 0; iteration < maxIterations; iteration++) {
@@ -186,32 +192,28 @@ class BatteryOptimizer {
                 // Revenue calculation
                 totalRevenue += pDischarge[t] * price - pCharge[t] * price;
 
-                // State-based penalties (like in Mathematica code)
+                // State-based penalties with improved logic
                 if (state === 1) { // Charging state
                     if (pDischarge[t] > 0) {
                         totalPenalty += penaltyWeight * pDischarge[t]; // Penalty for discharging
                     }
-                    // Only charge if price is below threshold
-                    const avgPrice = prices.reduce((sum, p) => sum + p, 0) / prices.length;
-                    const priceThreshold = avgPrice * 0.5;
-                    
-                    if (price < priceThreshold && price > 0) { // Only charge if price is below threshold AND positive
+                    // Only charge if price is below threshold and we have room
+                    if (price < priceThreshold && currentSoC < params.socMax * 0.95) {
                         totalUtilization += utilizationWeight * (pCharge[t] / params.pMax);
-                        if (currentSoC < params.socMax * 0.8) {
-                            totalUtilization += utilizationWeight * 0.1 * pCharge[t]; // Reduced incentive
-                        }
                     } else {
-                        // Penalty for charging at high prices or negative prices
-                        totalPenalty += penaltyWeight * 0.1 * pCharge[t];
+                        // Penalty for charging at high prices or when full
+                        totalPenalty += penaltyWeight * 0.5 * pCharge[t];
                     }
                 } else if (state === 3) { // Discharging state
                     if (pCharge[t] > 0) {
                         totalPenalty += penaltyWeight * pCharge[t]; // Penalty for charging
                     }
-                    // Strong incentive to discharge to min SoC
-                    totalUtilization += utilizationWeight * (pDischarge[t] / params.pMax);
-                    if (currentSoC > params.socMax * 0.2) {
-                        totalUtilization += utilizationWeight * pDischarge[t]; // Strong incentive to discharge when above 20%
+                    // Only discharge if price is above threshold and we have energy
+                    if (price > highPriceThreshold && currentSoC > params.socMin * 1.05) {
+                        totalUtilization += utilizationWeight * (pDischarge[t] / params.pMax);
+                    } else {
+                        // Penalty for discharging at low prices or when empty
+                        totalPenalty += penaltyWeight * 0.5 * pDischarge[t];
                     }
                 } else if (state === 2) { // Idle state
                     if (pCharge[t] > 0 || pDischarge[t] > 0) {
@@ -221,10 +223,10 @@ class BatteryOptimizer {
 
                 // SoC bounds penalty - much stronger penalties
                 if (currentSoC < params.socMin) {
-                    totalPenalty += penaltyWeight * 10 * Math.pow(params.socMin - currentSoC, 2); // 10x stronger penalty
+                    totalPenalty += socPenaltyWeight * Math.pow(params.socMin - currentSoC, 2);
                 }
                 if (currentSoC > params.socMax) {
-                    totalPenalty += penaltyWeight * 10 * Math.pow(currentSoC - params.socMax, 2); // 10x stronger penalty
+                    totalPenalty += socPenaltyWeight * Math.pow(currentSoC - params.socMax, 2);
                 }
 
                 // Update SoC for next time step
@@ -248,18 +250,10 @@ class BatteryOptimizer {
                 // Gradient for pCharge[t]
                 let gradCharge = -price; // Revenue gradient
                 if (state === 1) {
-                    // Only charge if price is below a reasonable threshold (e.g., 50% of average price)
-                    const avgPrice = prices.reduce((sum, p) => sum + p, 0) / prices.length;
-                    const priceThreshold = avgPrice * 0.5; // Only charge when price is below 50% of average
-                    
-                    if (price < priceThreshold && price > 0) { // Only charge if price is below threshold AND positive
+                    if (price < priceThreshold && currentSoC < params.socMax * 0.95) {
                         gradCharge += utilizationWeight / params.pMax; // Utilization incentive
-                        if (currentSoC < params.socMax * 0.8) {
-                            gradCharge += utilizationWeight * 0.1; // Reduced incentive to charge when below 80%
-                        }
                     } else {
-                        // Strong penalty for charging at high prices or negative prices
-                        gradCharge -= penaltyWeight * 0.1;
+                        gradCharge -= penaltyWeight * 0.5; // Penalty
                     }
                 } else if (state === 3) {
                     gradCharge -= penaltyWeight; // State violation penalty
@@ -270,9 +264,10 @@ class BatteryOptimizer {
                 // Gradient for pDischarge[t]
                 let gradDischarge = price; // Revenue gradient
                 if (state === 3) {
-                    gradDischarge += utilizationWeight / params.pMax; // Utilization incentive
-                    if (currentSoC > params.socMax * 0.2) {
-                        gradDischarge += utilizationWeight; // Strong incentive to discharge when above 20%
+                    if (price > highPriceThreshold && currentSoC > params.socMin * 1.05) {
+                        gradDischarge += utilizationWeight / params.pMax; // Utilization incentive
+                    } else {
+                        gradDischarge -= penaltyWeight * 0.5; // Penalty
                     }
                 } else if (state === 1) {
                     gradDischarge -= penaltyWeight; // State violation penalty
@@ -281,9 +276,6 @@ class BatteryOptimizer {
                 }
 
                 // Update variables with gradient descent
-                const oldCharge = pCharge[t];
-                const oldDischarge = pDischarge[t];
-                
                 pCharge[t] = Math.max(0, Math.min(params.pMax, pCharge[t] + learningRate * gradCharge));
                 pDischarge[t] = Math.max(0, Math.min(params.pMax, pDischarge[t] + learningRate * gradDischarge));
 
@@ -295,16 +287,12 @@ class BatteryOptimizer {
             }
 
             // Early stopping if objective is stable
-            if (iteration > 100 && Math.abs(objective) < 1e-6) {
+            if (iteration > 500 && Math.abs(objective) < 1e-4) {
                 break;
             }
         }
 
         // Collect debug information
-        // Calculate average price for threshold
-        const avgPrice = prices.reduce((sum, p) => sum + p, 0) / prices.length;
-        const priceThreshold = avgPrice * 0.5;
-        
         debugReport.params = {
             socMin: params.socMin,
             socMax: params.socMax,
@@ -312,7 +300,8 @@ class BatteryOptimizer {
             efficiency: params.efficiency,
             socRange: params.socMax - params.socMin,
             avgPrice: avgPrice,
-            priceThreshold: priceThreshold
+            priceThreshold: priceThreshold,
+            highPriceThreshold: highPriceThreshold
         };
 
         debugReport.optimization = {
@@ -336,9 +325,7 @@ class BatteryOptimizer {
             maxPossibleDischargeTotal: params.pMax * pDischarge.length
         };
 
-        // FINAL SOC CALCULATION - This is the correct way to calculate SoC
-        let currentSoC = (params.socMin + params.socMax) / 2; // Start at middle
-        
+        // Store initial results from optimization
         for (let t = 0; t < T; t++) {
             const state = viterbiPath[t];
             const price = prices[t];
@@ -348,52 +335,16 @@ class BatteryOptimizer {
             schedule.discharging[t] = pDischarge[t];
             schedule.revenue[t] = pDischarge[t] * price - pCharge[t] * price;
             schedule.actions[t] = pCharge[t] > 0 ? 'charge' : (pDischarge[t] > 0 ? 'discharge' : 'idle');
-
-            // Store current SoC BEFORE applying this hour's charging/discharging
-            schedule.soc[t] = currentSoC;
-
-            // Apply this hour's charging/discharging to get SoC for next hour
-            const energyCharged = pCharge[t] * params.efficiency; // Energy added to battery
-            const energyDischarged = pDischarge[t]; // Energy removed from battery
-            currentSoC = currentSoC + energyCharged - energyDischarged;
-
-            // Ensure SoC stays within bounds
-            currentSoC = Math.max(params.socMin, Math.min(params.socMax, currentSoC));
-
-            // Collect SoC evolution data for debugging
-            const socChange = energyCharged - energyDischarged;
-            const distanceToMin = schedule.soc[t] - params.socMin;
-            const distanceToMax = params.socMax - schedule.soc[t];
-            
-            if (t < 5 || t > T - 5 || distanceToMin < 5 || distanceToMax < 5) {
-                debugReport.socEvolution.push({
-                    time: t,
-                    socStart: schedule.soc[t],
-                    charge: pCharge[t],
-                    discharge: pDischarge[t],
-                    energyCharged: energyCharged,
-                    energyDischarged: energyDischarged,
-                    socChange: socChange,
-                    socEnd: currentSoC,
-                    distanceToMin: distanceToMin,
-                    distanceToMax: distanceToMax,
-                    hmmState: viterbiPath[t],
-                    price: prices[t],
-                    nearMinSoC: distanceToMin < 5,
-                    nearMaxSoC: distanceToMax < 5
-                });
-            }
         }
 
-        // Final SoC statistics
-        const socValues = schedule.soc;
+        // Final SoC statistics (will be updated after post-processing)
         debugReport.socAnalysis = {
-            minSoC: Math.min(...socValues),
-            maxSoC: Math.max(...socValues),
-            socRangeUsed: Math.max(...socValues) - Math.min(...socValues),
-            socRangeUtilization: ((Math.max(...socValues) - Math.min(...socValues)) / (params.socMax - params.socMin) * 100),
-            reachedMinSoC: Math.min(...socValues) <= params.socMin + 0.1,
-            reachedMaxSoC: Math.max(...socValues) >= params.socMax - 0.1
+            minSoC: 0,
+            maxSoC: 0,
+            socRangeUsed: 0,
+            socRangeUtilization: 0,
+            reachedMinSoC: false,
+            reachedMaxSoC: false
         };
         
         // HMM state analysis
@@ -427,6 +378,109 @@ class BatteryOptimizer {
 
         // Store debug report in schedule for access
         schedule.debugReport = debugReport;
+
+        // POST-PROCESSING: Ensure SoC constraints are properly enforced
+        let postProcessSoC = (params.socMin + params.socMax) / 2;
+        let totalRevenue = 0;
+        
+        for (let t = 0; t < T; t++) {
+            const price = prices[t];
+            const originalCharge = schedule.charging[t];
+            const originalDischarge = schedule.discharging[t];
+            
+            // Calculate what the SoC would be after this action
+            const energyCharged = originalCharge * params.efficiency;
+            const energyDischarged = originalDischarge;
+            const newSoC = postProcessSoC + energyCharged - energyDischarged;
+            
+            // If this action would violate SoC bounds, adjust it
+            if (newSoC < params.socMin) {
+                // Reduce discharge or increase charge to avoid going below min
+                const deficit = params.socMin - newSoC;
+                if (originalDischarge > 0) {
+                    const maxDischargeReduction = originalDischarge;
+                    const dischargeReduction = Math.min(deficit, maxDischargeReduction);
+                    schedule.discharging[t] = originalDischarge - dischargeReduction;
+                } else if (originalCharge < params.pMax) {
+                    const maxChargeIncrease = params.pMax - originalCharge;
+                    const chargeIncrease = Math.min(deficit / params.efficiency, maxChargeIncrease);
+                    schedule.charging[t] = originalCharge + chargeIncrease;
+                }
+            } else if (newSoC > params.socMax) {
+                // Reduce charge or increase discharge to avoid going above max
+                const excess = newSoC - params.socMax;
+                if (originalCharge > 0) {
+                    const maxChargeReduction = originalCharge;
+                    const chargeReduction = Math.min(excess / params.efficiency, maxChargeReduction);
+                    schedule.charging[t] = originalCharge - chargeReduction;
+                } else if (originalDischarge < params.pMax) {
+                    const maxDischargeIncrease = params.pMax - originalDischarge;
+                    const dischargeIncrease = Math.min(excess, maxDischargeIncrease);
+                    schedule.discharging[t] = originalDischarge + dischargeIncrease;
+                }
+            }
+            
+            // Store the SoC BEFORE applying this hour's actions
+            schedule.soc[t] = postProcessSoC;
+            
+            // Recalculate revenue and update SoC
+            schedule.revenue[t] = schedule.discharging[t] * price - schedule.charging[t] * price;
+            totalRevenue += schedule.revenue[t];
+            
+            const finalEnergyCharged = schedule.charging[t] * params.efficiency;
+            const finalEnergyDischarged = schedule.discharging[t];
+            const socChange = finalEnergyCharged - finalEnergyDischarged;
+            postProcessSoC = postProcessSoC + finalEnergyCharged - finalEnergyDischarged;
+            postProcessSoC = Math.max(params.socMin, Math.min(params.socMax, postProcessSoC));
+            
+            // Collect SoC evolution data for debugging
+            const distanceToMin = schedule.soc[t] - params.socMin;
+            const distanceToMax = params.socMax - schedule.soc[t];
+            
+            if (t < 5 || t > T - 5 || distanceToMin < 5 || distanceToMax < 5) {
+                debugReport.socEvolution.push({
+                    time: t,
+                    socStart: schedule.soc[t],
+                    charge: schedule.charging[t],
+                    discharge: schedule.discharging[t],
+                    energyCharged: finalEnergyCharged,
+                    energyDischarged: finalEnergyDischarged,
+                    socChange: socChange,
+                    socEnd: postProcessSoC,
+                    distanceToMin: distanceToMin,
+                    distanceToMax: distanceToMax,
+                    hmmState: viterbiPath[t],
+                    price: prices[t],
+                    nearMinSoC: distanceToMin < 5,
+                    nearMaxSoC: distanceToMax < 5
+                });
+            }
+        }
+        
+        // Add post-processing summary to debug report
+        debugReport.postProcessing = {
+            finalSoC: postProcessSoC,
+            totalRevenueAfterAdjustment: totalRevenue,
+            socConstraintViolations: 0
+        };
+        
+        // Check for any remaining SoC violations
+        for (let t = 0; t < T; t++) {
+            if (schedule.soc[t] < params.socMin - 0.01 || schedule.soc[t] > params.socMax + 0.01) {
+                debugReport.postProcessing.socConstraintViolations++;
+            }
+        }
+        
+        // Update final SoC statistics with post-processed values
+        const socValues = schedule.soc;
+        debugReport.socAnalysis = {
+            minSoC: Math.min(...socValues),
+            maxSoC: Math.max(...socValues),
+            socRangeUsed: Math.max(...socValues) - Math.min(...socValues),
+            socRangeUtilization: ((Math.max(...socValues) - Math.min(...socValues)) / (params.socMax - params.socMin) * 100),
+            reachedMinSoC: Math.min(...socValues) <= params.socMin + 0.1,
+            reachedMaxSoC: Math.max(...socValues) >= params.socMax - 0.1
+        };
 
         return schedule;
     }
@@ -573,6 +627,66 @@ class BatteryOptimizer {
             };
         }
     }
+
+    // Test method to verify SoC calculation
+    testSoCCalculation() {
+        console.log('=== Testing SoC Calculation ===');
+        
+        // Simple test case: 24 hours with known prices
+        const testPrices = [
+            50, 45, 40, 35, 30, 25,  // Low prices (should charge)
+            60, 65, 70, 75, 80, 85,  // Medium prices (should idle)
+            90, 95, 100, 105, 110, 115,  // High prices (should discharge)
+            80, 75, 70, 65, 60, 55   // Back to medium/low
+        ];
+        
+        const testParams = {
+            socMin: 10,
+            socMax: 50,
+            pMax: 5,
+            efficiency: 0.85
+        };
+        
+        console.log('Test parameters:', testParams);
+        console.log('Test prices:', testPrices);
+        
+        const result = this.optimize(testPrices, testParams);
+        
+        if (result.success) {
+            console.log('✓ Optimization successful');
+            console.log('Final SoC:', result.schedule.soc[testPrices.length - 1]);
+            console.log('SoC range used:', Math.max(...result.schedule.soc) - Math.min(...result.schedule.soc));
+            console.log('Total revenue:', result.totalRevenue);
+            
+            // Verify SoC constraints
+            const minSoC = Math.min(...result.schedule.soc);
+            const maxSoC = Math.max(...result.schedule.soc);
+            const socViolations = result.schedule.soc.filter(soc => 
+                soc < testParams.socMin - 0.01 || soc > testParams.socMax + 0.01
+            ).length;
+            
+            console.log('Min SoC achieved:', minSoC);
+            console.log('Max SoC achieved:', maxSoC);
+            console.log('SoC constraint violations:', socViolations);
+            
+            if (socViolations === 0) {
+                console.log('✓ SoC constraints properly enforced');
+            } else {
+                console.log('✗ SoC constraint violations detected');
+            }
+            
+            // Show first few and last few SoC values
+            console.log('SoC evolution (first 5):', result.schedule.soc.slice(0, 5));
+            console.log('SoC evolution (last 5):', result.schedule.soc.slice(-5));
+            
+        } else {
+            console.log('✗ Optimization failed:', result.error);
+        }
+        
+        console.log('=== End Test ===');
+        return result;
+    }
+
 }
 
 // Export the BatteryOptimizer class for use in other files.
