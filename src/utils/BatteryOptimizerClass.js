@@ -155,17 +155,21 @@ class BatteryOptimizer {
         const maxIterations = 1000;
         const learningRate = 0.01;
 
-        // Initialize variables
+        // Initialize variables - start at middle to enable full range utilization
         let pCharge = Array(T).fill(0);
         let pDischarge = Array(T).fill(0);
-        let soc = Array(T).fill(params.socMin); // Start at minimum SoC
-        soc[0] = params.socMin;
+        let soc = Array(T).fill((params.socMin + params.socMax) / 2); // Start at middle of range
+        soc[0] = (params.socMin + params.socMax) / 2;
+
+        // Add strong incentives to use full SoC range
+        const rangeUtilizationWeight = 1e5; // Strong weight for range utilization
 
         // Gradient descent optimization
         for (let iteration = 0; iteration < maxIterations; iteration++) {
             let totalRevenue = 0;
             let totalPenalty = 0;
             let totalUtilization = 0;
+            let totalRangeUtilization = 0;
 
             // Forward pass: calculate SoC evolution and objective
             for (let t = 0; t < T; t++) {
@@ -185,30 +189,36 @@ class BatteryOptimizer {
                     if (pDischarge[t] > 0) {
                         totalPenalty += penaltyWeight * pDischarge[t]; // Penalty for discharging
                     }
-                    // Incentive to charge
+                    // Strong incentive to charge to max SoC
                     totalUtilization += utilizationWeight * (pCharge[t] / params.pMax);
+                    if (soc[t] < params.socMax * 0.8) {
+                        totalRangeUtilization += rangeUtilizationWeight * pCharge[t]; // Strong incentive to charge when below 80%
+                    }
                 } else if (state === 3) { // Discharging state
                     if (pCharge[t] > 0) {
                         totalPenalty += penaltyWeight * pCharge[t]; // Penalty for charging
                     }
-                    // Incentive to discharge
+                    // Strong incentive to discharge to min SoC
                     totalUtilization += utilizationWeight * (pDischarge[t] / params.pMax);
+                    if (soc[t] > params.socMax * 0.2) {
+                        totalRangeUtilization += rangeUtilizationWeight * pDischarge[t]; // Strong incentive to discharge when above 20%
+                    }
                 } else if (state === 2) { // Idle state
                     if (pCharge[t] > 0 || pDischarge[t] > 0) {
                         totalPenalty += penaltyWeight * (pCharge[t] + pDischarge[t]); // Penalty for any action
                     }
                 }
 
-                // SoC bounds penalty
+                // SoC bounds penalty - much stronger penalties
                 if (soc[t] < params.socMin) {
-                    totalPenalty += penaltyWeight * Math.pow(params.socMin - soc[t], 2);
+                    totalPenalty += penaltyWeight * 10 * Math.pow(params.socMin - soc[t], 2); // 10x stronger penalty
                 }
                 if (soc[t] > params.socMax) {
-                    totalPenalty += penaltyWeight * Math.pow(soc[t] - params.socMax, 2);
+                    totalPenalty += penaltyWeight * 10 * Math.pow(soc[t] - params.socMax, 2); // 10x stronger penalty
                 }
             }
 
-            const objective = totalRevenue + totalUtilization - totalPenalty;
+            const objective = totalRevenue + totalUtilization + totalRangeUtilization - totalPenalty;
 
             // Backward pass: calculate gradients and update variables
             for (let t = 0; t < T; t++) {
@@ -219,6 +229,9 @@ class BatteryOptimizer {
                 let gradCharge = -price; // Revenue gradient
                 if (state === 1) {
                     gradCharge += utilizationWeight / params.pMax; // Utilization incentive
+                    if (soc[t] < params.socMax * 0.8) {
+                        gradCharge += rangeUtilizationWeight; // Strong incentive to charge when below 80%
+                    }
                 } else if (state === 3) {
                     gradCharge -= penaltyWeight; // State violation penalty
                 } else if (state === 2) {
@@ -229,6 +242,9 @@ class BatteryOptimizer {
                 let gradDischarge = price; // Revenue gradient
                 if (state === 3) {
                     gradDischarge += utilizationWeight / params.pMax; // Utilization incentive
+                    if (soc[t] > params.socMax * 0.2) {
+                        gradDischarge += rangeUtilizationWeight; // Strong incentive to discharge when above 20%
+                    }
                 } else if (state === 1) {
                     gradDischarge -= penaltyWeight; // State violation penalty
                 } else if (state === 2) {
