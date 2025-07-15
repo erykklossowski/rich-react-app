@@ -230,6 +230,28 @@ const App = () => {
     }
   }, [setStatusMessage])
 
+  // Test differential evolution optimization
+  const testDifferentialEvolution = useCallback(() => {
+    setStatusMessage({ type: 'info', text: 'Testing differential evolution optimization...' })
+    try {
+      // Reset optimizer state to ensure fresh start
+      optimizer.reset()
+      
+      const result = optimizer.testDifferentialEvolution()
+      
+      if (result.success) {
+        setStatusMessage({ 
+          type: 'success', 
+          text: `Differential evolution test successful! Revenue: ${result.totalRevenue}, SoC range: ${result.minSoC.toFixed(1)}-${result.maxSoC.toFixed(1)}` 
+        })
+      } else {
+        setStatusMessage({ type: 'error', text: `Differential evolution test failed: ${result.error}` })
+      }
+    } catch (error) {
+      setStatusMessage({ type: 'error', text: `Differential evolution test error: ${error.message}` })
+    }
+  }, [setStatusMessage])
+
   // Load quick presets
   const loadQuickPresets = useCallback(() => {
     const presets = [
@@ -640,10 +662,17 @@ Based on these metrics, what are the key takeaways? Suggest 1-3 actionable strat
               </button>
               <button
                 onClick={testSimpleOptimization}
-                className="amiga-tab w-full"
+                className="amiga-tab w-full mb-2"
               >
                 <CheckCircle className="h-3 w-3 inline mr-1" />
                 Test Simple Opt
+              </button>
+              <button
+                onClick={testDifferentialEvolution}
+                className="amiga-tab w-full"
+              >
+                <TrendingUp className="h-3 w-3 inline mr-1" />
+                Test Diff Evolution
               </button>
             </div>
           </div>

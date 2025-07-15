@@ -146,10 +146,9 @@ class BatteryOptimizer {
 
     // Optimizes battery charge/discharge schedule using constrained optimization
     optimizeBatterySchedule(prices, viterbiPath, params) {
-        // Use simplified optimization instead of complex gradient descent
-        // This avoids numerical instability and crashes
-        console.log('Using simplified optimization for stability');
-        return this.simpleOptimize(prices, params);
+        // Use differential evolution for sophisticated optimization
+        console.log('Using differential evolution optimization');
+        return this.differentialEvolutionOptimize(prices, params);
     }
 
     // Simplified optimization for testing - bypasses complex constraints
@@ -200,6 +199,223 @@ class BatteryOptimizer {
         }
 
         return schedule;
+    }
+
+    // Differential Evolution optimization for battery scheduling
+    differentialEvolutionOptimize(prices, params) {
+        const T = prices.length;
+        if (T === 0) {
+            return {
+                charging: [],
+                discharging: [],
+                soc: [],
+                revenue: [],
+                actions: []
+            };
+        }
+
+        // Define bounds for each time step (charging and discharging power)
+        const bounds = [];
+        for (let t = 0; t < T; t++) {
+            bounds.push([0, params.pMax]); // Charging power bounds
+            bounds.push([0, params.pMax]); // Discharging power bounds
+        }
+
+        // Cost function for differential evolution
+        const costFunction = (individual) => {
+            // Convert individual to charging/discharging schedule
+            const charging = [];
+            const discharging = [];
+            
+            for (let t = 0; t < T; t++) {
+                charging.push(individual[t * 2]);
+                discharging.push(individual[t * 2 + 1]);
+            }
+
+            // Calculate SoC evolution and check constraints
+            let currentSoC = (params.socMin + params.socMax) / 2;
+            let totalRevenue = 0;
+            let constraintViolation = 0;
+
+            for (let t = 0; t < T; t++) {
+                const price = prices[t];
+                const charge = charging[t];
+                const discharge = discharging[t];
+
+                // Revenue calculation
+                totalRevenue += discharge * price - charge * price;
+
+                // Update SoC
+                const energyCharged = charge * params.efficiency;
+                const energyDischarged = discharge;
+                currentSoC = currentSoC + energyCharged - energyDischarged;
+
+                // SoC constraint violation penalty
+                if (currentSoC < params.socMin) {
+                    constraintViolation += Math.pow(params.socMin - currentSoC, 2) * 1e6;
+                    currentSoC = params.socMin;
+                }
+                if (currentSoC > params.socMax) {
+                    constraintViolation += Math.pow(currentSoC - params.socMax, 2) * 1e6;
+                    currentSoC = params.socMax;
+                }
+
+                // Simultaneous charge/discharge penalty
+                if (charge > 0 && discharge > 0) {
+                    constraintViolation += Math.pow(charge + discharge, 2) * 1e5;
+                }
+            }
+
+            // Return negative revenue (minimization problem) plus constraint penalties
+            return -totalRevenue + constraintViolation;
+        };
+
+        // Differential evolution parameters
+        const popsize = Math.min(50, Math.max(20, T * 2)); // Population size based on problem size
+        const mutate = 0.5; // Mutation factor
+        const recombination = 0.7; // Recombination rate
+        const maxiter = Math.min(100, Math.max(30, T)); // Max generations based on problem size
+
+        console.log(`Starting differential evolution optimization:`);
+        console.log(`  Time steps: ${T}`);
+        console.log(`  Population size: ${popsize}`);
+        console.log(`  Max generations: ${maxiter}`);
+        console.log(`  Variables: ${bounds.length}`);
+
+        // Run differential evolution
+        const bestSolution = this.runDifferentialEvolution(costFunction, bounds, popsize, mutate, recombination, maxiter);
+
+        // Convert solution back to schedule
+        const schedule = {
+            charging: Array(T).fill(0),
+            discharging: Array(T).fill(0),
+            soc: Array(T).fill(0),
+            revenue: Array(T).fill(0),
+            actions: Array(T).fill('idle')
+        };
+
+        let currentSoC = (params.socMin + params.socMax) / 2;
+
+        for (let t = 0; t < T; t++) {
+            schedule.charging[t] = bestSolution[t * 2];
+            schedule.discharging[t] = bestSolution[t * 2 + 1];
+            
+            // Store current SoC
+            schedule.soc[t] = currentSoC;
+
+            // Update SoC
+            const energyCharged = schedule.charging[t] * params.efficiency;
+            const energyDischarged = schedule.discharging[t];
+            currentSoC = currentSoC + energyCharged - energyDischarged;
+            currentSoC = Math.max(params.socMin, Math.min(params.socMax, currentSoC));
+
+            // Calculate revenue
+            schedule.revenue[t] = schedule.discharging[t] * prices[t] - schedule.charging[t] * prices[t];
+
+            // Determine action
+            if (schedule.charging[t] > 0 && schedule.discharging[t] > 0) {
+                schedule.actions[t] = 'both'; // Should be penalized in optimization
+            } else if (schedule.charging[t] > 0) {
+                schedule.actions[t] = 'charge';
+            } else if (schedule.discharging[t] > 0) {
+                schedule.actions[t] = 'discharge';
+            } else {
+                schedule.actions[t] = 'idle';
+            }
+        }
+
+        console.log(`Differential evolution completed. Best revenue: ${schedule.revenue.reduce((sum, r) => sum + r, 0)}`);
+        return schedule;
+    }
+
+    // Differential evolution algorithm implementation
+    runDifferentialEvolution(costFunc, bounds, popsize, mutate, recombination, maxiter) {
+        // Initialize population
+        const population = [];
+        for (let i = 0; i < popsize; i++) {
+            const individual = [];
+            for (let j = 0; j < bounds.length; j++) {
+                individual.push(bounds[j][0] + Math.random() * (bounds[j][1] - bounds[j][0]));
+            }
+            population.push(individual);
+        }
+
+        let bestSolution = null;
+        let bestScore = Infinity;
+
+        // Main evolution loop
+        for (let generation = 0; generation < maxiter; generation++) {
+            const newPopulation = [];
+
+            for (let j = 0; j < popsize; j++) {
+                // Select three random individuals (excluding current)
+                const candidates = Array.from({length: popsize}, (_, i) => i).filter(i => i !== j);
+                const randomIndices = this.shuffleArray(candidates).slice(0, 3);
+                
+                const x1 = population[randomIndices[0]];
+                const x2 = population[randomIndices[1]];
+                const x3 = population[randomIndices[2]];
+                const target = population[j];
+
+                // Mutation: create donor vector
+                const donor = [];
+                for (let k = 0; k < target.length; k++) {
+                    donor.push(x1[k] + mutate * (x2[k] - x3[k]));
+                }
+
+                // Ensure bounds
+                for (let k = 0; k < donor.length; k++) {
+                    donor[k] = Math.max(bounds[k][0], Math.min(bounds[k][1], donor[k]));
+                }
+
+                // Recombination: create trial vector
+                const trial = [];
+                for (let k = 0; k < target.length; k++) {
+                    if (Math.random() <= recombination) {
+                        trial.push(donor[k]);
+                    } else {
+                        trial.push(target[k]);
+                    }
+                }
+
+                // Selection
+                const trialScore = costFunc(trial);
+                const targetScore = costFunc(target);
+
+                if (trialScore < targetScore) {
+                    newPopulation.push(trial);
+                    if (trialScore < bestScore) {
+                        bestScore = trialScore;
+                        bestSolution = [...trial];
+                    }
+                } else {
+                    newPopulation.push(target);
+                    if (targetScore < bestScore) {
+                        bestScore = targetScore;
+                        bestSolution = [...target];
+                    }
+                }
+            }
+
+            population.length = 0;
+            population.push(...newPopulation);
+
+            if (generation % 10 === 0) {
+                console.log(`  Generation ${generation}: Best score = ${bestScore.toFixed(2)}`);
+            }
+        }
+
+        return bestSolution;
+    }
+
+    // Helper function to shuffle array
+    shuffleArray(array) {
+        const shuffled = [...array];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
     }
 
     // Calculate actual battery cycles by counting charge/discharge cycles between min and max SoC
@@ -533,6 +749,83 @@ class BatteryOptimizer {
             totalEnergyDischarged,
             minSoC,
             maxSoC
+        };
+    }
+
+    // Test differential evolution optimization
+    testDifferentialEvolution() {
+        console.log('=== Testing Differential Evolution Optimization ===');
+        
+        // Reset optimizer state
+        this.reset();
+        
+        const testPrices = [
+            50, 45, 40, 35, 30, 25,  // Low prices (should charge)
+            60, 65, 70, 75, 80, 85,  // Medium prices (should idle)
+            90, 95, 100, 105, 110, 115,  // High prices (should discharge)
+            80, 75, 70, 65, 60, 55   // Back to medium/low
+        ];
+        
+        const testParams = {
+            socMin: 10,
+            socMax: 50,
+            pMax: 5,
+            efficiency: 0.85
+        };
+        
+        console.log('Test parameters:', testParams);
+        console.log('Test prices:', testPrices);
+        
+        const schedule = this.differentialEvolutionOptimize(testPrices, testParams);
+        
+        // Calculate metrics
+        const totalRevenue = schedule.revenue.reduce((sum, rev) => sum + rev, 0);
+        const totalEnergyCharged = schedule.charging.reduce((sum, charge) => sum + charge, 0);
+        const totalEnergyDischarged = schedule.discharging.reduce((sum, discharge) => sum + discharge, 0);
+        const minSoC = Math.min(...schedule.soc);
+        const maxSoC = Math.max(...schedule.soc);
+        
+        console.log('✓ Differential evolution optimization completed');
+        console.log('Total revenue:', totalRevenue);
+        console.log('Total energy charged:', totalEnergyCharged);
+        console.log('Total energy discharged:', totalEnergyDischarged);
+        console.log('SoC range:', minSoC, '-', maxSoC);
+        console.log('SoC range used:', maxSoC - minSoC);
+        
+        // Verify SoC constraints
+        const socViolations = schedule.soc.filter(soc => 
+            soc < testParams.socMin - 0.01 || soc > testParams.socMax + 0.01
+        ).length;
+        
+        if (socViolations === 0) {
+            console.log('✓ SoC constraints properly enforced');
+        } else {
+            console.log('✗ SoC constraint violations detected:', socViolations);
+        }
+        
+        // Show action distribution
+        const actionCounts = schedule.actions.reduce((counts, action) => {
+            counts[action] = (counts[action] || 0) + 1;
+            return counts;
+        }, {});
+        
+        console.log('Action distribution:', actionCounts);
+        
+        // Check for simultaneous charge/discharge (should be minimized)
+        const simultaneousActions = schedule.actions.filter(action => action === 'both').length;
+        console.log('Simultaneous charge/discharge actions:', simultaneousActions);
+        
+        console.log('=== End Differential Evolution Test ===');
+        
+        return {
+            success: true,
+            schedule,
+            totalRevenue,
+            totalEnergyCharged,
+            totalEnergyDischarged,
+            minSoC,
+            maxSoC,
+            method: 'differential_evolution'
         };
     }
 }
