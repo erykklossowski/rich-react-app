@@ -407,11 +407,22 @@ class BatteryOptimizer {
             avgChargeInState1: stateCounts[1] > 0 ? stateChargePower[1] / stateCounts[1] : 0
         };
         
-        // Constraint analysis
+        // Constraint analysis - calculate SoC values first for constraint checking
+        let testSoC = (params.socMin + params.socMax) / 2;
+        const constraintSoCValues = [];
+        
+        for (let t = 0; t < T; t++) {
+            constraintSoCValues.push(testSoC);
+            const energyCharged = pCharge[t] * params.efficiency;
+            const energyDischarged = pDischarge[t];
+            testSoC = testSoC + energyCharged - energyDischarged;
+            testSoC = Math.max(params.socMin, Math.min(params.socMax, testSoC));
+        }
+        
         debugReport.constraints = {
             hmmDischargeUnderutilized: stateCounts[3] > 0 && (stateDischargePower[3] / stateCounts[3]) < params.pMax * 0.8,
-            neverReachedMinSoC: Math.min(...socValues) > params.socMin + 1,
-            neverReachedMaxSoC: Math.max(...socValues) < params.socMax - 1,
+            neverReachedMinSoC: Math.min(...constraintSoCValues) > params.socMin + 1,
+            neverReachedMaxSoC: Math.max(...constraintSoCValues) < params.socMax - 1,
             energyConstraint: totalEnergyDischarged < ((params.socMin + params.socMax) / 2 - params.socMin),
             powerConstraint: Math.max(...pDischarge) < params.pMax
         };
