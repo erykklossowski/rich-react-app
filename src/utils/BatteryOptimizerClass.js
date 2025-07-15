@@ -270,6 +270,16 @@ class BatteryOptimizer {
         console.log('Max discharging power:', Math.max(...pDischarge), 'MW');
         console.log('Total charging energy:', pCharge.reduce((sum, p) => sum + p, 0), 'MWh');
         console.log('Total discharging energy:', pDischarge.reduce((sum, p) => sum + p, 0), 'MWh');
+        
+        // Calculate energy balance
+        const totalEnergyCharged = pCharge.reduce((sum, p) => sum + p, 0);
+        const totalEnergyDischarged = pDischarge.reduce((sum, p) => sum + p, 0);
+        const netEnergyChange = totalEnergyCharged * params.efficiency - totalEnergyDischarged;
+        console.log('Energy Balance:');
+        console.log('  Total energy charged:', totalEnergyCharged.toFixed(2), 'MWh');
+        console.log('  Total energy discharged:', totalEnergyDischarged.toFixed(2), 'MWh');
+        console.log('  Net energy change:', netEnergyChange.toFixed(2), 'MWh');
+        console.log('  Expected SoC change:', netEnergyChange.toFixed(2), 'MWh');
 
         // Final forward pass to get the optimized schedule
         let currentSoC = (params.socMin + params.socMax) / 2; // Start at middle
@@ -277,9 +287,14 @@ class BatteryOptimizer {
             const state = viterbiPath[t];
             const price = prices[t];
 
-            // Calculate SoC evolution correctly
+            // Store results for current time step
+            schedule.charging[t] = pCharge[t];
+            schedule.discharging[t] = pDischarge[t];
+            schedule.revenue[t] = pDischarge[t] * price - pCharge[t] * price;
+            schedule.actions[t] = pCharge[t] > 0 ? 'charge' : (pDischarge[t] > 0 ? 'discharge' : 'idle');
+
+            // Calculate SoC evolution - apply previous hour's charging/discharging to current SoC (consistent with optimization loop)
             if (t > 0) {
-                // Apply charging/discharging from previous hour to current SoC
                 const energyCharged = pCharge[t-1] * params.efficiency; // Energy added to battery
                 const energyDischarged = pDischarge[t-1]; // Energy removed from battery
                 currentSoC = currentSoC + energyCharged - energyDischarged;
@@ -287,17 +302,12 @@ class BatteryOptimizer {
 
             // Ensure SoC stays within bounds
             currentSoC = Math.max(params.socMin, Math.min(params.socMax, currentSoC));
-
-            // Store results
-            schedule.charging[t] = pCharge[t];
-            schedule.discharging[t] = pDischarge[t];
             schedule.soc[t] = currentSoC;
-            schedule.revenue[t] = pDischarge[t] * price - pCharge[t] * price;
-            schedule.actions[t] = pCharge[t] > 0 ? 'charge' : (pDischarge[t] > 0 ? 'discharge' : 'idle');
 
             // Debug: Log SoC evolution
             if (t < 5 || t > T - 5) { // Log first and last 5 time steps
-                console.log(`Time ${t}: SoC=${currentSoC.toFixed(2)}, Charge=${pCharge[t].toFixed(2)}, Discharge=${pDischarge[t].toFixed(2)}, Revenue=${schedule.revenue[t].toFixed(2)}`);
+                const prevSoC = t > 0 ? currentSoC - (pCharge[t-1] * params.efficiency - pDischarge[t-1]) : currentSoC;
+                console.log(`Time ${t}: SoC=${currentSoC.toFixed(2)}, Charge=${pCharge[t].toFixed(2)}, Discharge=${pDischarge[t].toFixed(2)}, Revenue=${schedule.revenue[t].toFixed(2)}, SoC_Change=${(currentSoC - prevSoC).toFixed(2)}`);
             }
         }
 
