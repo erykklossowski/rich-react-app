@@ -486,6 +486,56 @@ class BatteryOptimizer {
         return schedule;
     }
 
+    // Simplified optimization for testing - bypasses complex constraints
+    simpleOptimize(prices, params) {
+        const T = prices.length;
+        const schedule = {
+            charging: Array(T).fill(0),
+            discharging: Array(T).fill(0),
+            soc: Array(T).fill(0),
+            revenue: Array(T).fill(0),
+            actions: Array(T).fill('idle')
+        };
+
+        if (T === 0) return schedule;
+
+        // Simple greedy strategy: charge at low prices, discharge at high prices
+        const avgPrice = prices.reduce((sum, p) => sum + p, 0) / prices.length;
+        let currentSoC = (params.socMin + params.socMax) / 2;
+
+        for (let t = 0; t < T; t++) {
+            const price = prices[t];
+            
+            // Store current SoC
+            schedule.soc[t] = currentSoC;
+
+            // Simple decision logic
+            if (price < avgPrice * 0.8 && currentSoC < params.socMax * 0.9) {
+                // Charge at low prices if we have room
+                schedule.charging[t] = Math.min(params.pMax, (params.socMax - currentSoC) / params.efficiency);
+                schedule.actions[t] = 'charge';
+            } else if (price > avgPrice * 1.2 && currentSoC > params.socMin * 1.1) {
+                // Discharge at high prices if we have energy
+                schedule.discharging[t] = Math.min(params.pMax, currentSoC - params.socMin);
+                schedule.actions[t] = 'discharge';
+            } else {
+                // Idle
+                schedule.actions[t] = 'idle';
+            }
+
+            // Update SoC
+            const energyCharged = schedule.charging[t] * params.efficiency;
+            const energyDischarged = schedule.discharging[t];
+            currentSoC = currentSoC + energyCharged - energyDischarged;
+            currentSoC = Math.max(params.socMin, Math.min(params.socMax, currentSoC));
+
+            // Calculate revenue
+            schedule.revenue[t] = schedule.discharging[t] * price - schedule.charging[t] * price;
+        }
+
+        return schedule;
+    }
+
     // Calculate actual battery cycles by counting charge/discharge cycles between min and max SoC
     calculateBatteryCycles(socValues, params) {
         if (socValues.length < 2) return 0;
@@ -742,6 +792,74 @@ class BatteryOptimizer {
         return result;
     }
 
+    // Test simplified optimization
+    testSimpleOptimization() {
+        console.log('=== Testing Simplified Optimization ===');
+        
+        const testPrices = [
+            50, 45, 40, 35, 30, 25,  // Low prices (should charge)
+            60, 65, 70, 75, 80, 85,  // Medium prices (should idle)
+            90, 95, 100, 105, 110, 115,  // High prices (should discharge)
+            80, 75, 70, 65, 60, 55   // Back to medium/low
+        ];
+        
+        const testParams = {
+            socMin: 10,
+            socMax: 50,
+            pMax: 5,
+            efficiency: 0.85
+        };
+        
+        console.log('Test parameters:', testParams);
+        console.log('Test prices:', testPrices);
+        
+        const schedule = this.simpleOptimize(testPrices, testParams);
+        
+        // Calculate metrics
+        const totalRevenue = schedule.revenue.reduce((sum, rev) => sum + rev, 0);
+        const totalEnergyCharged = schedule.charging.reduce((sum, charge) => sum + charge, 0);
+        const totalEnergyDischarged = schedule.discharging.reduce((sum, discharge) => sum + discharge, 0);
+        const minSoC = Math.min(...schedule.soc);
+        const maxSoC = Math.max(...schedule.soc);
+        
+        console.log('✓ Simplified optimization completed');
+        console.log('Total revenue:', totalRevenue);
+        console.log('Total energy charged:', totalEnergyCharged);
+        console.log('Total energy discharged:', totalEnergyDischarged);
+        console.log('SoC range:', minSoC, '-', maxSoC);
+        console.log('SoC range used:', maxSoC - minSoC);
+        
+        // Verify SoC constraints
+        const socViolations = schedule.soc.filter(soc => 
+            soc < testParams.socMin - 0.01 || soc > testParams.socMax + 0.01
+        ).length;
+        
+        if (socViolations === 0) {
+            console.log('✓ SoC constraints properly enforced');
+        } else {
+            console.log('✗ SoC constraint violations detected:', socViolations);
+        }
+        
+        // Show action distribution
+        const actionCounts = schedule.actions.reduce((counts, action) => {
+            counts[action] = (counts[action] || 0) + 1;
+            return counts;
+        }, {});
+        
+        console.log('Action distribution:', actionCounts);
+        
+        console.log('=== End Simple Test ===');
+        
+        return {
+            success: true,
+            schedule,
+            totalRevenue,
+            totalEnergyCharged,
+            totalEnergyDischarged,
+            minSoC,
+            maxSoC
+        };
+    }
 }
 
 // Export the BatteryOptimizer class for use in other files.

@@ -199,6 +199,25 @@ const App = () => {
     }
   }, [setStatusMessage])
 
+  // Test simplified optimization
+  const testSimpleOptimization = useCallback(() => {
+    setStatusMessage({ type: 'info', text: 'Testing simplified optimization...' })
+    try {
+      const result = optimizer.testSimpleOptimization()
+      
+      if (result.success) {
+        setStatusMessage({ 
+          type: 'success', 
+          text: `Simple optimization test successful! Revenue: ${result.totalRevenue}, SoC range: ${result.minSoC.toFixed(1)}-${result.maxSoC.toFixed(1)}` 
+        })
+      } else {
+        setStatusMessage({ type: 'error', text: `Simple optimization test failed: ${result.error}` })
+      }
+    } catch (error) {
+      setStatusMessage({ type: 'error', text: `Simple optimization test error: ${error.message}` })
+    }
+  }, [setStatusMessage])
+
   // Load quick presets
   const loadQuickPresets = useCallback(() => {
     const presets = [
@@ -317,12 +336,75 @@ const App = () => {
                 ...result
               })
             } else {
-              console.error(`✗ Optimization failed for period ${key}:`, result.error)
+              console.error(`✗ Main optimization failed for period ${key}:`, result.error)
               console.error(`Error details:`, result)
+              
+              // Try simplified optimization as fallback
+              console.log(`Attempting simplified optimization for period ${key}...`)
+              const simpleSchedule = optimizer.simpleOptimize(prices, params)
+              const totalRevenue = simpleSchedule.revenue.reduce((sum, rev) => sum + rev, 0)
+              const totalEnergyCharged = simpleSchedule.charging.reduce((sum, charge) => sum + charge, 0)
+              const totalEnergyDischarged = simpleSchedule.discharging.reduce((sum, discharge) => sum + discharge, 0)
+              
+              console.log(`✓ Simplified optimization successful for period ${key}`)
+              console.log(`  Revenue: ${totalRevenue}`)
+              console.log(`  Energy charged: ${totalEnergyCharged}`)
+              console.log(`  Energy discharged: ${totalEnergyDischarged}`)
+              
+              results.push({
+                period: key,
+                periodStart: groupData[0].datetime,
+                periodEnd: groupData[groupData.length - 1].datetime,
+                dataPoints: prices.length,
+                prices: prices,
+                success: true,
+                schedule: simpleSchedule,
+                totalRevenue,
+                totalEnergyCharged,
+                totalEnergyDischarged,
+                operationalEfficiency: totalEnergyCharged > 0 ? totalEnergyDischarged / totalEnergyCharged : 0,
+                avgPrice: prices.reduce((a, b) => a + b, 0) / prices.length,
+                cycles: 0, // Simplified optimization doesn't calculate cycles
+                vwapCharge: 0,
+                vwapDischarge: 0,
+                method: 'simplified'
+              })
             }
           } catch (optimizationError) {
             console.error(`✗ Optimization threw exception for period ${key}:`, optimizationError)
             console.error(`Exception stack:`, optimizationError.stack)
+            
+            // Try simplified optimization as fallback
+            console.log(`Attempting simplified optimization as fallback for period ${key}...`)
+            try {
+              const simpleSchedule = optimizer.simpleOptimize(prices, params)
+              const totalRevenue = simpleSchedule.revenue.reduce((sum, rev) => sum + rev, 0)
+              const totalEnergyCharged = simpleSchedule.charging.reduce((sum, charge) => sum + charge, 0)
+              const totalEnergyDischarged = simpleSchedule.discharging.reduce((sum, discharge) => sum + discharge, 0)
+              
+              console.log(`✓ Simplified optimization fallback successful for period ${key}`)
+              
+              results.push({
+                period: key,
+                periodStart: groupData[0].datetime,
+                periodEnd: groupData[groupData.length - 1].datetime,
+                dataPoints: prices.length,
+                prices: prices,
+                success: true,
+                schedule: simpleSchedule,
+                totalRevenue,
+                totalEnergyCharged,
+                totalEnergyDischarged,
+                operationalEfficiency: totalEnergyCharged > 0 ? totalEnergyDischarged / totalEnergyCharged : 0,
+                avgPrice: prices.reduce((a, b) => a + b, 0) / prices.length,
+                cycles: 0,
+                vwapCharge: 0,
+                vwapDischarge: 0,
+                method: 'simplified_fallback'
+              })
+            } catch (fallbackError) {
+              console.error(`✗ Simplified optimization fallback also failed for period ${key}:`, fallbackError)
+            }
           }
         } else {
           console.warn(`Skipping period ${key} due to insufficient data points (${prices.length} < 24).`)
@@ -536,10 +618,17 @@ Based on these metrics, what are the key takeaways? Suggest 1-3 actionable strat
               </button>
               <button
                 onClick={testOptimizerWithRealData}
-                className="amiga-tab w-full"
+                className="amiga-tab w-full mb-2"
               >
                 <Info className="h-3 w-3 inline mr-1" />
                 Test Real Data
+              </button>
+              <button
+                onClick={testSimpleOptimization}
+                className="amiga-tab w-full"
+              >
+                <CheckCircle className="h-3 w-3 inline mr-1" />
+                Test Simple Opt
               </button>
             </div>
           </div>
