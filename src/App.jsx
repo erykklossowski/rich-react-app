@@ -147,6 +147,29 @@ const App = () => {
     }
   }, [setStatusMessage])
 
+  // Test optimizer in browser
+  const testOptimizer = useCallback(() => {
+    setStatusMessage({ type: 'info', text: 'Testing optimizer in browser...' })
+    try {
+      const testPrices = [50, 45, 40, 35, 30, 25, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 80, 75, 70, 65, 60, 55]
+      const testParams = { socMin: 10, socMax: 50, pMax: 5, efficiency: 0.85 }
+      
+      console.log('Testing optimizer with:', { testPrices, testParams })
+      const result = optimizer.optimize(testPrices, testParams)
+      
+      if (result.success) {
+        setStatusMessage({ 
+          type: 'success', 
+          text: `Optimizer test successful! Revenue: ${result.totalRevenue}, SoC range: ${Math.min(...result.schedule.soc)}-${Math.max(...result.schedule.soc)}` 
+        })
+      } else {
+        setStatusMessage({ type: 'error', text: `Optimizer test failed: ${result.error}` })
+      }
+    } catch (error) {
+      setStatusMessage({ type: 'error', text: `Optimizer test error: ${error.message}` })
+    }
+  }, [setStatusMessage])
+
   // Load quick presets
   const loadQuickPresets = useCallback(() => {
     const presets = [
@@ -205,6 +228,8 @@ const App = () => {
         throw new Error('No data found for the selected date range. Please adjust dates.')
       }
       console.log(`Filtered data points: ${filteredData.length}`)
+      console.log(`Date range: ${startDate} to ${endDate}`)
+      console.log(`Sample filtered data:`, filteredData.slice(0, 3))
 
       setProgressText(`Processing ${filteredData.length} records...`)
       setProgress(40)
@@ -216,6 +241,14 @@ const App = () => {
         throw new Error('No valid periods found for analysis. Check date range and analysis type.')
       }
       console.log(`Number of analysis periods: ${groupKeys.length}`)
+      console.log(`Period keys:`, groupKeys.slice(0, 5))
+      
+      // Log sample data from first few groups
+      for (let i = 0; i < Math.min(3, groupKeys.length); i++) {
+        const key = groupKeys[i];
+        const groupData = groups[key];
+        console.log(`Group ${key}: ${groupData.length} records, price range: ${Math.min(...groupData.map(r => r.price))} - ${Math.max(...groupData.map(r => r.price))}`);
+      }
 
       setProgressText(`Analyzing ${groupKeys.length} periods...`)
       setProgress(60)
@@ -227,8 +260,14 @@ const App = () => {
         const prices = groupData.map(record => record.price)
 
         if (prices.length > 24) {
+          console.log(`Attempting optimization for period ${key} with ${prices.length} data points`)
+          console.log(`Price range: ${Math.min(...prices)} - ${Math.max(...prices)}`)
+          console.log(`Parameters:`, params)
+          
           const result = optimizer.optimize(prices, params)
+          
           if (result.success) {
+            console.log(`✓ Optimization successful for period ${key}`)
             results.push({
               period: key,
               periodStart: groupData[0].datetime,
@@ -238,7 +277,8 @@ const App = () => {
               ...result
             })
           } else {
-            console.warn(`Optimization failed for period ${key}: ${result.error}`)
+            console.error(`✗ Optimization failed for period ${key}:`, result.error)
+            console.error(`Error details:`, result)
           }
         } else {
           console.warn(`Skipping period ${key} due to insufficient data points (${prices.length} < 24).`)
@@ -436,12 +476,19 @@ Based on these metrics, what are the key takeaways? Suggest 1-3 actionable strat
               <button
                 onClick={() => handleTabChange('backtest')}
                 className={cn(
-                  "amiga-tab w-full",
+                  "amiga-tab w-full mb-2",
                   activeTab === 'backtest' && "active"
                 )}
               >
                 <Battery className="h-3 w-3 inline mr-1" />
                 Historical Backtest
+              </button>
+              <button
+                onClick={testOptimizer}
+                className="amiga-tab w-full"
+              >
+                <AlertCircle className="h-3 w-3 inline mr-1" />
+                Test Optimizer
               </button>
             </div>
           </div>

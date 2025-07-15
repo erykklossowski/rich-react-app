@@ -564,23 +564,37 @@ class BatteryOptimizer {
                 throw new Error('No price data provided');
             }
 
+            console.log(`Starting optimization with ${prices.length} price points`);
+            console.log(`Parameters:`, params);
+
             // 1. Categorize prices to create observations for HMM.
             this.priceCategories = this.categorizePrices(prices);
+            console.log(`Price categories calculated: ${this.priceCategories.length} categories`);
+            
             // 2. Calculate transition probabilities between hidden states.
             this.transitionMatrix = this.calculateTransitionMatrix(this.priceCategories);
+            console.log(`Transition matrix calculated`);
+            
             // 3. Initialize emission probabilities (action likelihood given state).
             this.emissionMatrix = this.initializeEmissionMatrix(prices);
+            console.log(`Emission matrix initialized`);
+            
             // 4. Use Viterbi to find the most likely sequence of hidden states.
             this.viterbiPath = this.viterbiDecode(this.priceCategories, this.transitionMatrix, this.emissionMatrix);
+            console.log(`Viterbi path calculated: ${this.viterbiPath.length} states`);
 
             // 5. Optimize battery schedule based on Viterbi path and parameters.
+            console.log(`Starting battery schedule optimization...`);
             const schedule = this.optimizeBatterySchedule(prices, this.viterbiPath, params);
+            console.log(`Battery schedule optimization completed`);
 
             // Calculate key performance indicators.
             const totalRevenue = schedule.revenue.reduce((sum, rev) => sum + rev, 0);
             const totalEnergyCharged = schedule.charging.reduce((sum, charge) => sum + charge, 0);
             const totalEnergyDischarged = schedule.discharging.reduce((sum, discharge) => sum + discharge, 0);
             const efficiency = totalEnergyCharged > 0 ? totalEnergyDischarged / totalEnergyCharged : 0;
+
+            console.log(`Performance metrics calculated: Revenue=${totalRevenue}, Charged=${totalEnergyCharged}, Discharged=${totalEnergyDischarged}`);
 
             // Calculate actual battery cycles using SoC evolution
             const actualCycles = this.calculateBatteryCycles(schedule.soc, params);
@@ -605,6 +619,8 @@ class BatteryOptimizer {
             const vwapCharge = vwapChargeDenominator > 0 ? vwapChargeNumerator / vwapChargeDenominator : 0;
             const vwapDischarge = vwapDischargeDenominator > 0 ? vwapDischargeNumerator / vwapDischargeDenominator : 0;
 
+            console.log(`Optimization completed successfully`);
+
             return {
                 success: true,
                 schedule,
@@ -622,6 +638,8 @@ class BatteryOptimizer {
                 vwapDischarge
             };
         } catch (error) {
+            console.error(`Optimization failed with error:`, error);
+            console.error(`Error stack:`, error.stack);
             return {
                 success: false,
                 error: error.message
