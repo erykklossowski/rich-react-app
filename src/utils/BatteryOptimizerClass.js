@@ -149,6 +149,17 @@ class BatteryOptimizer {
 
         if (T === 0) return schedule;
 
+        // Debug report collection
+        const debugReport = {
+            params: {},
+            optimization: {},
+            energyBalance: {},
+            socAnalysis: {},
+            hmmAnalysis: {},
+            constraints: {},
+            socEvolution: []
+        };
+
         // Constrained optimization parameters
         const penaltyWeight = 1e6; // Penalty for violating state constraints
         const utilizationWeight = 1e4; // Weight for utilization incentives
@@ -158,28 +169,19 @@ class BatteryOptimizer {
         // Initialize variables - start at middle to enable full range utilization
         let pCharge = Array(T).fill(0);
         let pDischarge = Array(T).fill(0);
-        let soc = Array(T).fill((params.socMin + params.socMax) / 2); // Start at middle of range
-        soc[0] = (params.socMin + params.socMax) / 2;
-
-        // Add strong incentives to use full SoC range
-        const rangeUtilizationWeight = 1e5; // Strong weight for range utilization
 
         // Gradient descent optimization
         for (let iteration = 0; iteration < maxIterations; iteration++) {
             let totalRevenue = 0;
             let totalPenalty = 0;
             let totalUtilization = 0;
-            let totalRangeUtilization = 0;
 
             // Forward pass: calculate SoC evolution and objective
+            let currentSoC = (params.socMin + params.socMax) / 2; // Start at middle of range
+            
             for (let t = 0; t < T; t++) {
                 const state = viterbiPath[t];
                 const price = prices[t];
-
-                // SoC evolution constraint
-                if (t > 0) {
-                    soc[t] = soc[t-1] + params.efficiency * pCharge[t-1] - pDischarge[t-1] / params.efficiency;
-                }
 
                 // Revenue calculation
                 totalRevenue += pDischarge[t] * price - pCharge[t] * price;
@@ -191,8 +193,8 @@ class BatteryOptimizer {
                     }
                     // Strong incentive to charge to max SoC
                     totalUtilization += utilizationWeight * (pCharge[t] / params.pMax);
-                    if (soc[t] < params.socMax * 0.8) {
-                        totalRangeUtilization += rangeUtilizationWeight * pCharge[t]; // Strong incentive to charge when below 80%
+                    if (currentSoC < params.socMax * 0.8) {
+                        totalUtilization += utilizationWeight * pCharge[t]; // Strong incentive to charge when below 80%
                     }
                 } else if (state === 3) { // Discharging state
                     if (pCharge[t] > 0) {
@@ -200,8 +202,8 @@ class BatteryOptimizer {
                     }
                     // Strong incentive to discharge to min SoC
                     totalUtilization += utilizationWeight * (pDischarge[t] / params.pMax);
-                    if (soc[t] > params.socMax * 0.2) {
-                        totalRangeUtilization += rangeUtilizationWeight * pDischarge[t]; // Strong incentive to discharge when above 20%
+                    if (currentSoC > params.socMax * 0.2) {
+                        totalUtilization += utilizationWeight * pDischarge[t]; // Strong incentive to discharge when above 20%
                     }
                 } else if (state === 2) { // Idle state
                     if (pCharge[t] > 0 || pDischarge[t] > 0) {
@@ -210,17 +212,27 @@ class BatteryOptimizer {
                 }
 
                 // SoC bounds penalty - much stronger penalties
-                if (soc[t] < params.socMin) {
-                    totalPenalty += penaltyWeight * 10 * Math.pow(params.socMin - soc[t], 2); // 10x stronger penalty
+                if (currentSoC < params.socMin) {
+                    totalPenalty += penaltyWeight * 10 * Math.pow(params.socMin - currentSoC, 2); // 10x stronger penalty
                 }
-                if (soc[t] > params.socMax) {
-                    totalPenalty += penaltyWeight * 10 * Math.pow(soc[t] - params.socMax, 2); // 10x stronger penalty
+                if (currentSoC > params.socMax) {
+                    totalPenalty += penaltyWeight * 10 * Math.pow(currentSoC - params.socMax, 2); // 10x stronger penalty
                 }
+
+                // Update SoC for next time step
+                const energyCharged = pCharge[t] * params.efficiency; // Energy added to battery
+                const energyDischarged = pDischarge[t]; // Energy removed from battery
+                currentSoC = currentSoC + energyCharged - energyDischarged;
+                
+                // Ensure SoC stays within bounds for next iteration
+                currentSoC = Math.max(params.socMin, Math.min(params.socMax, currentSoC));
             }
 
-            const objective = totalRevenue + totalUtilization + totalRangeUtilization - totalPenalty;
+            const objective = totalRevenue + totalUtilization - totalPenalty;
 
             // Backward pass: calculate gradients and update variables
+            currentSoC = (params.socMin + params.socMax) / 2; // Reset for gradient calculation
+            
             for (let t = 0; t < T; t++) {
                 const state = viterbiPath[t];
                 const price = prices[t];
@@ -229,8 +241,8 @@ class BatteryOptimizer {
                 let gradCharge = -price; // Revenue gradient
                 if (state === 1) {
                     gradCharge += utilizationWeight / params.pMax; // Utilization incentive
-                    if (soc[t] < params.socMax * 0.8) {
-                        gradCharge += rangeUtilizationWeight; // Strong incentive to charge when below 80%
+                    if (currentSoC < params.socMax * 0.8) {
+                        gradCharge += utilizationWeight; // Strong incentive to charge when below 80%
                     }
                 } else if (state === 3) {
                     gradCharge -= penaltyWeight; // State violation penalty
@@ -242,8 +254,8 @@ class BatteryOptimizer {
                 let gradDischarge = price; // Revenue gradient
                 if (state === 3) {
                     gradDischarge += utilizationWeight / params.pMax; // Utilization incentive
-                    if (soc[t] > params.socMax * 0.2) {
-                        gradDischarge += rangeUtilizationWeight; // Strong incentive to discharge when above 20%
+                    if (currentSoC > params.socMax * 0.2) {
+                        gradDischarge += utilizationWeight; // Strong incentive to discharge when above 20%
                     }
                 } else if (state === 1) {
                     gradDischarge -= penaltyWeight; // State violation penalty
@@ -252,8 +264,17 @@ class BatteryOptimizer {
                 }
 
                 // Update variables with gradient descent
+                const oldCharge = pCharge[t];
+                const oldDischarge = pDischarge[t];
+                
                 pCharge[t] = Math.max(0, Math.min(params.pMax, pCharge[t] + learningRate * gradCharge));
                 pDischarge[t] = Math.max(0, Math.min(params.pMax, pDischarge[t] + learningRate * gradDischarge));
+
+                // Update SoC for gradient calculation
+                const energyCharged = pCharge[t] * params.efficiency;
+                const energyDischarged = pDischarge[t];
+                currentSoC = currentSoC + energyCharged - energyDischarged;
+                currentSoC = Math.max(params.socMin, Math.min(params.socMax, currentSoC));
             }
 
             // Early stopping if objective is stable
@@ -262,27 +283,39 @@ class BatteryOptimizer {
             }
         }
 
-        // Debug: Log optimization results
-        console.log('Optimization Debug:');
-        console.log('Params:', { socMin: params.socMin, socMax: params.socMax, pMax: params.pMax, efficiency: params.efficiency });
-        console.log('SoC Range:', params.socMax - params.socMin, 'MWh');
-        console.log('Max charging power:', Math.max(...pCharge), 'MW');
-        console.log('Max discharging power:', Math.max(...pDischarge), 'MW');
-        console.log('Total charging energy:', pCharge.reduce((sum, p) => sum + p, 0), 'MWh');
-        console.log('Total discharging energy:', pDischarge.reduce((sum, p) => sum + p, 0), 'MWh');
-        
+        // Collect debug information
+        debugReport.params = {
+            socMin: params.socMin,
+            socMax: params.socMax,
+            pMax: params.pMax,
+            efficiency: params.efficiency,
+            socRange: params.socMax - params.socMin
+        };
+
+        debugReport.optimization = {
+            maxChargingPower: Math.max(...pCharge),
+            maxDischargingPower: Math.max(...pDischarge),
+            totalChargingEnergy: pCharge.reduce((sum, p) => sum + p, 0),
+            totalDischargingEnergy: pDischarge.reduce((sum, p) => sum + p, 0)
+        };
+
         // Calculate energy balance
         const totalEnergyCharged = pCharge.reduce((sum, p) => sum + p, 0);
         const totalEnergyDischarged = pDischarge.reduce((sum, p) => sum + p, 0);
         const netEnergyChange = totalEnergyCharged * params.efficiency - totalEnergyDischarged;
-        console.log('Energy Balance:');
-        console.log('  Total energy charged:', totalEnergyCharged.toFixed(2), 'MWh');
-        console.log('  Total energy discharged:', totalEnergyDischarged.toFixed(2), 'MWh');
-        console.log('  Net energy change:', netEnergyChange.toFixed(2), 'MWh');
-        console.log('  Expected SoC change:', netEnergyChange.toFixed(2), 'MWh');
+        
+        debugReport.energyBalance = {
+            totalEnergyCharged: totalEnergyCharged,
+            totalEnergyDischarged: totalEnergyDischarged,
+            netEnergyChange: netEnergyChange,
+            requiredDischargeToMin: (params.socMin + params.socMax) / 2 - params.socMin,
+            maxPossibleDischarge1h: params.pMax,
+            maxPossibleDischargeTotal: params.pMax * pDischarge.length
+        };
 
-        // Final forward pass to get the optimized schedule
+        // FINAL SOC CALCULATION - This is the correct way to calculate SoC
         let currentSoC = (params.socMin + params.socMax) / 2; // Start at middle
+        
         for (let t = 0; t < T; t++) {
             const state = viterbiPath[t];
             const price = prices[t];
@@ -293,33 +326,157 @@ class BatteryOptimizer {
             schedule.revenue[t] = pDischarge[t] * price - pCharge[t] * price;
             schedule.actions[t] = pCharge[t] > 0 ? 'charge' : (pDischarge[t] > 0 ? 'discharge' : 'idle');
 
-            // Calculate SoC evolution - apply previous hour's charging/discharging to current SoC (consistent with optimization loop)
-            if (t > 0) {
-                const energyCharged = pCharge[t-1] * params.efficiency; // Energy added to battery
-                const energyDischarged = pDischarge[t-1]; // Energy removed from battery
-                currentSoC = currentSoC + energyCharged - energyDischarged;
-            }
+            // Store current SoC BEFORE applying this hour's charging/discharging
+            schedule.soc[t] = currentSoC;
+
+            // Apply this hour's charging/discharging to get SoC for next hour
+            const energyCharged = pCharge[t] * params.efficiency; // Energy added to battery
+            const energyDischarged = pDischarge[t]; // Energy removed from battery
+            currentSoC = currentSoC + energyCharged - energyDischarged;
 
             // Ensure SoC stays within bounds
             currentSoC = Math.max(params.socMin, Math.min(params.socMax, currentSoC));
-            schedule.soc[t] = currentSoC;
 
-            // Debug: Log SoC evolution
-            if (t < 5 || t > T - 5) { // Log first and last 5 time steps
-                const prevSoC = t > 0 ? currentSoC - (pCharge[t-1] * params.efficiency - pDischarge[t-1]) : currentSoC;
-                console.log(`Time ${t}: SoC=${currentSoC.toFixed(2)}, Charge=${pCharge[t].toFixed(2)}, Discharge=${pDischarge[t].toFixed(2)}, Revenue=${schedule.revenue[t].toFixed(2)}, SoC_Change=${(currentSoC - prevSoC).toFixed(2)}`);
+            // Collect SoC evolution data for debugging
+            const socChange = energyCharged - energyDischarged;
+            const distanceToMin = schedule.soc[t] - params.socMin;
+            const distanceToMax = params.socMax - schedule.soc[t];
+            
+            if (t < 5 || t > T - 5 || distanceToMin < 5 || distanceToMax < 5) {
+                debugReport.socEvolution.push({
+                    time: t,
+                    socStart: schedule.soc[t],
+                    charge: pCharge[t],
+                    discharge: pDischarge[t],
+                    energyCharged: energyCharged,
+                    energyDischarged: energyDischarged,
+                    socChange: socChange,
+                    socEnd: currentSoC,
+                    distanceToMin: distanceToMin,
+                    distanceToMax: distanceToMax,
+                    hmmState: viterbiPath[t],
+                    price: prices[t],
+                    nearMinSoC: distanceToMin < 5,
+                    nearMaxSoC: distanceToMax < 5
+                });
             }
         }
 
-        // Debug: Log final SoC statistics
+        // Final SoC statistics
         const socValues = schedule.soc;
-        console.log('Final SoC Statistics:');
-        console.log('Min SoC:', Math.min(...socValues).toFixed(2), 'MWh');
-        console.log('Max SoC:', Math.max(...socValues).toFixed(2), 'MWh');
-        console.log('SoC Range Used:', (Math.max(...socValues) - Math.min(...socValues)).toFixed(2), 'MWh');
-        console.log('SoC Range Utilization:', ((Math.max(...socValues) - Math.min(...socValues)) / (params.socMax - params.socMin) * 100).toFixed(1) + '%');
+        debugReport.socAnalysis = {
+            minSoC: Math.min(...socValues),
+            maxSoC: Math.max(...socValues),
+            socRangeUsed: Math.max(...socValues) - Math.min(...socValues),
+            socRangeUtilization: ((Math.max(...socValues) - Math.min(...socValues)) / (params.socMax - params.socMin) * 100),
+            reachedMinSoC: Math.min(...socValues) <= params.socMin + 0.1,
+            reachedMaxSoC: Math.max(...socValues) >= params.socMax - 0.1
+        };
+        
+        // HMM state analysis
+        const stateCounts = { 1: 0, 2: 0, 3: 0 };
+        const stateDischargePower = { 1: 0, 2: 0, 3: 0 };
+        const stateChargePower = { 1: 0, 2: 0, 3: 0 };
+        
+        for (let t = 0; t < T; t++) {
+            const state = viterbiPath[t];
+            stateCounts[state]++;
+            stateDischargePower[state] += pDischarge[t];
+            stateChargePower[state] += pCharge[t];
+        }
+        
+        debugReport.hmmAnalysis = {
+            stateDistribution: stateCounts,
+            dischargePowerByState: stateDischargePower,
+            chargePowerByState: stateChargePower,
+            avgDischargeInState3: stateCounts[3] > 0 ? stateDischargePower[3] / stateCounts[3] : 0,
+            avgChargeInState1: stateCounts[1] > 0 ? stateChargePower[1] / stateCounts[1] : 0
+        };
+        
+        // Constraint analysis
+        debugReport.constraints = {
+            hmmDischargeUnderutilized: stateCounts[3] > 0 && (stateDischargePower[3] / stateCounts[3]) < params.pMax * 0.8,
+            neverReachedMinSoC: Math.min(...socValues) > params.socMin + 1,
+            neverReachedMaxSoC: Math.max(...socValues) < params.socMax - 1,
+            energyConstraint: totalEnergyDischarged < ((params.socMin + params.socMax) / 2 - params.socMin),
+            powerConstraint: Math.max(...pDischarge) < params.pMax
+        };
+
+        // Store debug report in schedule for access
+        schedule.debugReport = debugReport;
 
         return schedule;
+    }
+
+    // Calculate actual battery cycles by counting charge/discharge cycles between min and max SoC
+    calculateBatteryCycles(socValues, params) {
+        if (socValues.length < 2) return 0;
+        
+        let cycles = 0;
+        let currentDirection = 0; // 0 = neutral, 1 = charging, -1 = discharging
+        let lastDirection = 0;
+        let cycleStartSoC = socValues[0];
+        let cycleEndSoC = socValues[0];
+        
+        // Define cycle thresholds (10% of the SoC range to avoid counting noise)
+        const cycleThreshold = (params.socMax - params.socMin) * 0.1;
+        const minCycleRange = (params.socMax - params.socMin) * 0.5; // Minimum 50% of range for a valid cycle
+        
+        console.log('Cycle Calculation Debug:');
+        console.log('  SoC Range:', params.socMax - params.socMin, 'MWh');
+        console.log('  Cycle threshold:', cycleThreshold.toFixed(2), 'MWh');
+        console.log('  Min cycle range:', minCycleRange.toFixed(2), 'MWh');
+        
+        for (let i = 1; i < socValues.length; i++) {
+            const prevSoC = socValues[i - 1];
+            const currentSoC = socValues[i];
+            const socChange = currentSoC - prevSoC;
+            
+            // Determine current direction
+            if (Math.abs(socChange) > cycleThreshold) {
+                currentDirection = socChange > 0 ? 1 : -1;
+            } else {
+                currentDirection = 0; // Neutral if change is too small
+            }
+            
+            // Debug: Log significant changes
+            if (Math.abs(socChange) > cycleThreshold) {
+                console.log(`  Hour ${i}: SoC ${prevSoC.toFixed(2)} → ${currentSoC.toFixed(2)} (change: ${socChange.toFixed(2)}, direction: ${currentDirection === 1 ? 'charging' : 'discharging'})`);
+            }
+            
+            // Detect direction change (cycle completion)
+            if (lastDirection !== 0 && currentDirection !== 0 && lastDirection !== currentDirection) {
+                // We have a direction change - check if it's a valid cycle
+                const cycleRange = Math.abs(cycleEndSoC - cycleStartSoC);
+                
+                console.log(`  Direction change detected: ${lastDirection === 1 ? 'charging' : 'discharging'} → ${currentDirection === 1 ? 'charging' : 'discharging'}, cycle range: ${cycleRange.toFixed(2)} MWh`);
+                
+                if (cycleRange >= minCycleRange) {
+                    cycles += 0.5; // Half cycle (charge or discharge)
+                    console.log(`  ✓ Valid cycle ${cycles.toFixed(1)}: ${cycleStartSoC.toFixed(2)} → ${cycleEndSoC.toFixed(2)} (range: ${cycleRange.toFixed(2)} MWh)`);
+                } else {
+                    console.log(`  ✗ Invalid cycle: range ${cycleRange.toFixed(2)} MWh < minimum ${minCycleRange.toFixed(2)} MWh`);
+                }
+                
+                // Start new cycle
+                cycleStartSoC = currentSoC;
+                cycleEndSoC = currentSoC;
+            }
+            
+            // Update cycle end point
+            cycleEndSoC = currentSoC;
+            lastDirection = currentDirection;
+        }
+        
+        // Check for final cycle
+        const finalCycleRange = Math.abs(cycleEndSoC - cycleStartSoC);
+        if (finalCycleRange >= minCycleRange) {
+            cycles += 0.5;
+            console.log(`  Final cycle ${cycles.toFixed(1)}: ${cycleStartSoC.toFixed(2)} → ${cycleEndSoC.toFixed(2)} (range: ${finalCycleRange.toFixed(2)} MWh)`);
+        }
+        
+        console.log(`  Total cycles: ${cycles.toFixed(2)}`);
+        return cycles;
     }
 
     // Main optimization function that orchestrates the HMM and scheduling.
@@ -346,6 +503,9 @@ class BatteryOptimizer {
             const totalEnergyCharged = schedule.charging.reduce((sum, charge) => sum + charge, 0);
             const totalEnergyDischarged = schedule.discharging.reduce((sum, discharge) => sum + discharge, 0);
             const efficiency = totalEnergyCharged > 0 ? totalEnergyDischarged / totalEnergyCharged : 0;
+
+            // Calculate actual battery cycles using SoC evolution
+            const actualCycles = this.calculateBatteryCycles(schedule.soc, params);
 
             // Calculate Volume Weighted Average Price (VWAP).
             let vwapChargeNumerator = 0;
@@ -379,7 +539,7 @@ class BatteryOptimizer {
                 totalEnergyDischarged,
                 operationalEfficiency: efficiency,
                 avgPrice: prices.reduce((a, b) => a + b, 0) / prices.length,
-                cycles: params.socMax > 0 ? Math.max(totalEnergyCharged, totalEnergyDischarged) / params.socMax : 0, // Avoid division by zero
+                cycles: actualCycles, // Use actual cycle count instead of flawed calculation
                 vwapCharge,
                 vwapDischarge
             };

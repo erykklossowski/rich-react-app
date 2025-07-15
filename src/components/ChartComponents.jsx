@@ -45,6 +45,15 @@ export const PriceChart = ({ data, priceCategories, title }) => {
 
 // Component for displaying Battery State of Charge.
 export const SoCChart = ({ data, title }) => {
+    // Debug: Log SoC data being passed to chart
+    console.log('SoCChart Debug:');
+    console.log('  Data length:', data.length);
+    console.log('  First 5 SoC values:', data.slice(0, 5));
+    console.log('  Last 5 SoC values:', data.slice(-5));
+    console.log('  Min SoC:', Math.min(...data));
+    console.log('  Max SoC:', Math.max(...data));
+    console.log('  SoC range:', Math.max(...data) - Math.min(...data));
+    
     const hours = Array.from({ length: data.length }, (_, i) => i + 1);
     const chartData = {
         labels: hours,

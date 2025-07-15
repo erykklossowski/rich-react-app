@@ -6,6 +6,7 @@ import { useOptimizationStore } from '../store/optimizationStore'
 import { PriceChart, SoCChart, PowerChart, RevenueChart } from './ChartComponents'
 import MetricsGrid from './MetricsGrid'
 import AIInsights from './AIInsights'
+import DebugReport from './DebugReport'
 import { ArrowLeft, BarChart3, Table, TrendingUp } from 'lucide-react'
 import { formatCurrency, formatNumber } from '../lib/utils'
 
@@ -55,6 +56,11 @@ const ResultsDashboard = ({ data, isManualInput = false, onBack }) => {
         params={params}
       />
 
+      {/* Debug Report */}
+      {result.schedule.debugReport && (
+        <DebugReport debugReport={result.schedule.debugReport} />
+      )}
+
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Price Chart */}
@@ -89,6 +95,13 @@ const ResultsDashboard = ({ data, isManualInput = false, onBack }) => {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {/* Debug: Log the SoC data being passed */}
+            {console.log('ResultsDashboard SoC Debug:', {
+              socData: result.schedule.soc,
+              socLength: result.schedule.soc.length,
+              firstFew: result.schedule.soc.slice(0, 5),
+              lastFew: result.schedule.soc.slice(-5)
+            })}
             <SoCChart data={result.schedule.soc} title="" />
           </CardContent>
         </Card>
