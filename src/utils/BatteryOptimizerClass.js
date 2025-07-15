@@ -166,6 +166,7 @@ class BatteryOptimizer {
         const socPenaltyWeight = 1e8; // Much stronger penalty for SoC violations
         const maxIterations = 2000; // More iterations for better convergence
         const learningRate = 0.005; // Smaller learning rate for stability
+        const socConstraintWeight = 1e7; // Weight for SoC constraint violations during optimization
 
         // Initialize variables - start at middle to enable full range utilization
         let pCharge = Array(T).fill(0);
@@ -181,6 +182,7 @@ class BatteryOptimizer {
             let totalRevenue = 0;
             let totalPenalty = 0;
             let totalUtilization = 0;
+            let totalSoCViolation = 0;
 
             // Forward pass: calculate SoC evolution and objective
             let currentSoC = (params.socMin + params.socMax) / 2; // Start at middle of range
@@ -221,24 +223,24 @@ class BatteryOptimizer {
                     }
                 }
 
-                // SoC bounds penalty - much stronger penalties
-                if (currentSoC < params.socMin) {
-                    totalPenalty += socPenaltyWeight * Math.pow(params.socMin - currentSoC, 2);
-                }
-                if (currentSoC > params.socMax) {
-                    totalPenalty += socPenaltyWeight * Math.pow(currentSoC - params.socMax, 2);
-                }
-
                 // Update SoC for next time step
                 const energyCharged = pCharge[t] * params.efficiency; // Energy added to battery
                 const energyDischarged = pDischarge[t]; // Energy removed from battery
                 currentSoC = currentSoC + energyCharged - energyDischarged;
                 
+                // SoC bounds penalty - much stronger penalties
+                if (currentSoC < params.socMin) {
+                    totalSoCViolation += socConstraintWeight * Math.pow(params.socMin - currentSoC, 2);
+                }
+                if (currentSoC > params.socMax) {
+                    totalSoCViolation += socConstraintWeight * Math.pow(currentSoC - params.socMax, 2);
+                }
+                
                 // Ensure SoC stays within bounds for next iteration
                 currentSoC = Math.max(params.socMin, Math.min(params.socMax, currentSoC));
             }
 
-            const objective = totalRevenue + totalUtilization - totalPenalty;
+            const objective = totalRevenue + totalUtilization - totalPenalty - totalSoCViolation;
 
             // Backward pass: calculate gradients and update variables
             currentSoC = (params.socMin + params.socMax) / 2; // Reset for gradient calculation
@@ -275,20 +277,58 @@ class BatteryOptimizer {
                     gradDischarge -= penaltyWeight; // State violation penalty
                 }
 
+                // SoC constraint gradients
+                const energyCharged = pCharge[t] * params.efficiency;
+                const energyDischarged = pDischarge[t];
+                const newSoC = currentSoC + energyCharged - energyDischarged;
+                
+                if (newSoC < params.socMin) {
+                    const violation = params.socMin - newSoC;
+                    gradCharge -= socConstraintWeight * 2 * violation * params.efficiency; // Charge increases SoC
+                    gradDischarge += socConstraintWeight * 2 * violation; // Discharge decreases SoC
+                } else if (newSoC > params.socMax) {
+                    const violation = newSoC - params.socMax;
+                    gradCharge += socConstraintWeight * 2 * violation * params.efficiency; // Charge increases SoC
+                    gradDischarge -= socConstraintWeight * 2 * violation; // Discharge decreases SoC
+                }
+
                 // Update variables with gradient descent
                 pCharge[t] = Math.max(0, Math.min(params.pMax, pCharge[t] + learningRate * gradCharge));
                 pDischarge[t] = Math.max(0, Math.min(params.pMax, pDischarge[t] + learningRate * gradDischarge));
 
                 // Update SoC for gradient calculation
-                const energyCharged = pCharge[t] * params.efficiency;
-                const energyDischarged = pDischarge[t];
-                currentSoC = currentSoC + energyCharged - energyDischarged;
+                const finalEnergyCharged = pCharge[t] * params.efficiency;
+                const finalEnergyDischarged = pDischarge[t];
+                currentSoC = currentSoC + finalEnergyCharged - finalEnergyDischarged;
                 currentSoC = Math.max(params.socMin, Math.min(params.socMax, currentSoC));
             }
 
             // Early stopping if objective is stable
             if (iteration > 500 && Math.abs(objective) < 1e-4) {
                 break;
+            }
+
+            // Constraint violation check
+            if (iteration % 100 === 0) {
+                let maxViolation = 0;
+                let testSoC = (params.socMin + params.socMax) / 2;
+                for (let t = 0; t < T; t++) {
+                    const energyCharged = pCharge[t] * params.efficiency;
+                    const energyDischarged = pDischarge[t];
+                    testSoC = testSoC + energyCharged - energyDischarged;
+                    if (testSoC < params.socMin) {
+                        maxViolation = Math.max(maxViolation, params.socMin - testSoC);
+                    }
+                    if (testSoC > params.socMax) {
+                        maxViolation = Math.max(maxViolation, testSoC - params.socMax);
+                    }
+                    testSoC = Math.max(params.socMin, Math.min(params.socMax, testSoC));
+                }
+                
+                // If violations are too large, increase constraint weight
+                if (maxViolation > 1.0) {
+                    socConstraintWeight *= 1.1;
+                }
             }
         }
 
@@ -379,59 +419,23 @@ class BatteryOptimizer {
         // Store debug report in schedule for access
         schedule.debugReport = debugReport;
 
-        // POST-PROCESSING: Ensure SoC constraints are properly enforced
-        let postProcessSoC = (params.socMin + params.socMax) / 2;
-        let totalRevenue = 0;
+        // FINAL SOC CALCULATION - Calculate SoC based on actual charging/discharging actions
+        let currentSoC = (params.socMin + params.socMax) / 2; // Start at middle
         
         for (let t = 0; t < T; t++) {
+            const state = viterbiPath[t];
             const price = prices[t];
-            const originalCharge = schedule.charging[t];
-            const originalDischarge = schedule.discharging[t];
+
+            // Store current SoC BEFORE applying this hour's charging/discharging
+            schedule.soc[t] = currentSoC;
+
+            // Apply this hour's charging/discharging to get SoC for next hour
+            const energyCharged = schedule.charging[t] * params.efficiency; // Energy added to battery
+            const energyDischarged = schedule.discharging[t]; // Energy removed from battery
+            currentSoC = currentSoC + energyCharged - energyDischarged;
             
-            // Calculate what the SoC would be after this action
-            const energyCharged = originalCharge * params.efficiency;
-            const energyDischarged = originalDischarge;
-            const newSoC = postProcessSoC + energyCharged - energyDischarged;
-            
-            // If this action would violate SoC bounds, adjust it
-            if (newSoC < params.socMin) {
-                // Reduce discharge or increase charge to avoid going below min
-                const deficit = params.socMin - newSoC;
-                if (originalDischarge > 0) {
-                    const maxDischargeReduction = originalDischarge;
-                    const dischargeReduction = Math.min(deficit, maxDischargeReduction);
-                    schedule.discharging[t] = originalDischarge - dischargeReduction;
-                } else if (originalCharge < params.pMax) {
-                    const maxChargeIncrease = params.pMax - originalCharge;
-                    const chargeIncrease = Math.min(deficit / params.efficiency, maxChargeIncrease);
-                    schedule.charging[t] = originalCharge + chargeIncrease;
-                }
-            } else if (newSoC > params.socMax) {
-                // Reduce charge or increase discharge to avoid going above max
-                const excess = newSoC - params.socMax;
-                if (originalCharge > 0) {
-                    const maxChargeReduction = originalCharge;
-                    const chargeReduction = Math.min(excess / params.efficiency, maxChargeReduction);
-                    schedule.charging[t] = originalCharge - chargeReduction;
-                } else if (originalDischarge < params.pMax) {
-                    const maxDischargeIncrease = params.pMax - originalDischarge;
-                    const dischargeIncrease = Math.min(excess, maxDischargeIncrease);
-                    schedule.discharging[t] = originalDischarge + dischargeIncrease;
-                }
-            }
-            
-            // Store the SoC BEFORE applying this hour's actions
-            schedule.soc[t] = postProcessSoC;
-            
-            // Recalculate revenue and update SoC
-            schedule.revenue[t] = schedule.discharging[t] * price - schedule.charging[t] * price;
-            totalRevenue += schedule.revenue[t];
-            
-            const finalEnergyCharged = schedule.charging[t] * params.efficiency;
-            const finalEnergyDischarged = schedule.discharging[t];
-            const socChange = finalEnergyCharged - finalEnergyDischarged;
-            postProcessSoC = postProcessSoC + finalEnergyCharged - finalEnergyDischarged;
-            postProcessSoC = Math.max(params.socMin, Math.min(params.socMax, postProcessSoC));
+            // Ensure SoC stays within bounds
+            currentSoC = Math.max(params.socMin, Math.min(params.socMax, currentSoC));
             
             // Collect SoC evolution data for debugging
             const distanceToMin = schedule.soc[t] - params.socMin;
@@ -443,10 +447,10 @@ class BatteryOptimizer {
                     socStart: schedule.soc[t],
                     charge: schedule.charging[t],
                     discharge: schedule.discharging[t],
-                    energyCharged: finalEnergyCharged,
-                    energyDischarged: finalEnergyDischarged,
-                    socChange: socChange,
-                    socEnd: postProcessSoC,
+                    energyCharged: energyCharged,
+                    energyDischarged: energyDischarged,
+                    socChange: energyCharged - energyDischarged,
+                    socEnd: currentSoC,
                     distanceToMin: distanceToMin,
                     distanceToMax: distanceToMax,
                     hmmState: viterbiPath[t],
@@ -457,21 +461,7 @@ class BatteryOptimizer {
             }
         }
         
-        // Add post-processing summary to debug report
-        debugReport.postProcessing = {
-            finalSoC: postProcessSoC,
-            totalRevenueAfterAdjustment: totalRevenue,
-            socConstraintViolations: 0
-        };
-        
-        // Check for any remaining SoC violations
-        for (let t = 0; t < T; t++) {
-            if (schedule.soc[t] < params.socMin - 0.01 || schedule.soc[t] > params.socMax + 0.01) {
-                debugReport.postProcessing.socConstraintViolations++;
-            }
-        }
-        
-        // Update final SoC statistics with post-processed values
+        // Update final SoC statistics
         const socValues = schedule.soc;
         debugReport.socAnalysis = {
             minSoC: Math.min(...socValues),
@@ -675,9 +665,45 @@ class BatteryOptimizer {
                 console.log('✗ SoC constraint violations detected');
             }
             
+            // Show SoC evolution and verify it matches charging/discharging
+            console.log('\nSoC Evolution Analysis:');
+            let expectedSoC = (testParams.socMin + testParams.socMax) / 2;
+            let totalEnergyCharged = 0;
+            let totalEnergyDischarged = 0;
+            
+            for (let t = 0; t < Math.min(10, testPrices.length); t++) {
+                const actualSoC = result.schedule.soc[t];
+                const charge = result.schedule.charging[t];
+                const discharge = result.schedule.discharging[t];
+                const energyCharged = charge * testParams.efficiency;
+                const energyDischarged = discharge;
+                
+                totalEnergyCharged += energyCharged;
+                totalEnergyDischarged += energyDischarged;
+                
+                console.log(`Hour ${t}: SoC=${actualSoC.toFixed(2)}, Charge=${charge.toFixed(2)}, Discharge=${discharge.toFixed(2)}, EnergyCharged=${energyCharged.toFixed(2)}, EnergyDischarged=${energyDischarged.toFixed(2)}`);
+                
+                // Verify SoC calculation
+                if (t > 0) {
+                    const expectedChange = energyCharged - energyDischarged;
+                    const actualChange = actualSoC - result.schedule.soc[t-1];
+                    const error = Math.abs(expectedChange - actualChange);
+                    
+                    if (error > 0.01) {
+                        console.log(`  ⚠️ SoC calculation error at hour ${t}: expected change ${expectedChange.toFixed(2)}, actual change ${actualChange.toFixed(2)}`);
+                    } else {
+                        console.log(`  ✓ SoC calculation correct at hour ${t}`);
+                    }
+                }
+            }
+            
+            console.log(`\nTotal energy charged: ${totalEnergyCharged.toFixed(2)} MWh`);
+            console.log(`Total energy discharged: ${totalEnergyDischarged.toFixed(2)} MWh`);
+            console.log(`Net energy change: ${(totalEnergyCharged - totalEnergyDischarged).toFixed(2)} MWh`);
+            
             // Show first few and last few SoC values
-            console.log('SoC evolution (first 5):', result.schedule.soc.slice(0, 5));
-            console.log('SoC evolution (last 5):', result.schedule.soc.slice(-5));
+            console.log('\nSoC evolution (first 5):', result.schedule.soc.slice(0, 5).map(s => s.toFixed(2)));
+            console.log('SoC evolution (last 5):', result.schedule.soc.slice(-5).map(s => s.toFixed(2)));
             
         } else {
             console.log('✗ Optimization failed:', result.error);
