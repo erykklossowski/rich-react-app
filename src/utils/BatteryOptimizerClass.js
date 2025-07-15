@@ -317,11 +317,11 @@ class BatteryOptimizer {
         };
 
         // Differential evolution parameters
-        const popsize = Math.max(100, T * 5); // Much larger population size
+        const popsize = Math.min(30, Math.max(15, T * 1.5)); // Reduced population size
         const mutate = 0.5; // Mutation factor
         const recombination = 0.7; // Recombination rate
-        const maxiter = Math.max(200, T * 5); // Many more generations
-
+        const maxiter = Math.min(50, Math.max(25, T * 1.5)); // Reduced max generations
+        
         // Bias initial population: charge at low prices, discharge at high prices
         const sortedIndices = prices.map((p, i) => [p, i]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
         const lowIndices = sortedIndices.slice(0, Math.floor(T / 3));
@@ -419,7 +419,8 @@ class BatteryOptimizer {
             population.length = 0;
             population.push(...newPopulation);
 
-            if (generation % 10 === 0) {
+            // Less frequent logging in production mode
+            if (generation % (10) === 0) {
                 console.log(`  Generation ${generation}: Best score = ${bestScore.toFixed(2)}`);
             }
         }
