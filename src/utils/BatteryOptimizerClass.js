@@ -136,7 +136,7 @@ class BatteryOptimizer {
         return bestPath;
     }
 
-    // Optimizes battery charge/discharge schedule based on Viterbi path and market prices.
+    // Optimizes battery charge/discharge schedule using constrained optimization
     optimizeBatterySchedule(prices, viterbiPath, params) {
         const T = prices.length;
         const schedule = {
@@ -149,130 +149,122 @@ class BatteryOptimizer {
 
         if (T === 0) return schedule;
 
-        // Start at a more balanced SoC level to enable full range utilization
-        let currentSoC = (params.socMin + params.socMax) / 2; // Start at middle of range
-        schedule.soc[0] = currentSoC;
+        // Constrained optimization parameters
+        const penaltyWeight = 1e6; // Penalty for violating state constraints
+        const utilizationWeight = 1e4; // Weight for utilization incentives
+        const maxIterations = 1000;
+        const learningRate = 0.01;
 
-        const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
-        
-        // Calculate price percentiles for more dynamic thresholds
-        const sortedPrices = [...prices].sort((a, b) => a - b);
-        const lowPriceThreshold = sortedPrices[Math.floor(sortedPrices.length * 0.3)]; // 30th percentile
-        const highPriceThreshold = sortedPrices[Math.floor(sortedPrices.length * 0.7)]; // 70th percentile
+        // Initialize variables
+        let pCharge = Array(T).fill(0);
+        let pDischarge = Array(T).fill(0);
+        let soc = Array(T).fill(params.socMin); // Start at minimum SoC
+        soc[0] = params.socMin;
 
-        for (let t = 0; t < T; t++) {
-            const state = viterbiPath[t]; // HMM predicted state for current hour
-            const price = prices[t];
+        // Gradient descent optimization
+        for (let iteration = 0; iteration < maxIterations; iteration++) {
+            let totalRevenue = 0;
+            let totalPenalty = 0;
+            let totalUtilization = 0;
 
-            let charge = 0, discharge = 0;
-            let action = 'idle';
+            // Forward pass: calculate SoC evolution and objective
+            for (let t = 0; t < T; t++) {
+                const state = viterbiPath[t];
+                const price = prices[t];
 
-            // Dynamic price thresholds based on actual price distribution
-            const isLowPrice = price <= lowPriceThreshold;
-            const isHighPrice = price >= highPriceThreshold;
-            const isMediumPrice = price > lowPriceThreshold && price < highPriceThreshold;
-            
-            // Very minimal buffers to use full SoC range
-            const canCharge = currentSoC < params.socMax - 0.001;
-            const canDischarge = currentSoC > params.socMin + 0.001;
-
-            // Calculate SoC utilization and price advantage
-            const socUtilization = (currentSoC - params.socMin) / (params.socMax - params.socMin);
-            const priceAdvantage = (avgPrice - price) / avgPrice; // Positive = good for charging
-            
-            // Force aggressive utilization of full SoC range
-            if (state === 1 && (isLowPrice || isMediumPrice) && canCharge) {
-                // Charge aggressively in low price state
-                const maxCharge = Math.min(
-                    params.pMax,
-                    (params.socMax - currentSoC) / params.efficiency
-                );
-                
-                // Force charging to reach max SoC
-                let chargeFactor = 1.0;
-                if (isLowPrice) {
-                    chargeFactor = 1.0; // Full capacity on low prices
-                } else if (currentSoC < params.socMax * 0.8) {
-                    chargeFactor = 0.9; // Aggressive charging when below 80%
-                } else {
-                    chargeFactor = 0.7; // Moderate charging when near max
+                // SoC evolution constraint
+                if (t > 0) {
+                    soc[t] = soc[t-1] + params.efficiency * pCharge[t-1] - pDischarge[t-1] / params.efficiency;
                 }
-                
-                charge = maxCharge * chargeFactor;
-                currentSoC += charge * params.efficiency;
-                action = 'charge';
-            } else if (state === 3 && (isHighPrice || isMediumPrice) && canDischarge) {
-                // Discharge aggressively in high price state
-                const maxDischarge = Math.min(
-                    params.pMax,
-                    currentSoC - params.socMin
-                );
-                
-                // Force discharging to reach min SoC
-                let dischargeFactor = 1.0;
-                if (isHighPrice) {
-                    dischargeFactor = 1.0; // Full capacity on high prices
-                } else if (currentSoC > params.socMax * 0.2) {
-                    dischargeFactor = 0.9; // Aggressive discharging when above 20%
-                } else {
-                    dischargeFactor = 0.7; // Moderate discharging when near min
-                }
-                
-                discharge = maxDischarge * dischargeFactor;
-                currentSoC -= discharge;
-                action = 'discharge';
-            } else if (state === 2) {
-                // Medium state: be opportunistic based on price and SoC
-                if (isHighPrice && canDischarge && currentSoC > params.socMax * 0.3) {
-                    // Discharge on high prices if SoC is above 30%
-                    const maxDischarge = Math.min(
-                        params.pMax * 0.8,
-                        currentSoC - params.socMin
-                    );
-                    discharge = maxDischarge * 0.8;
-                    currentSoC -= discharge;
-                    action = 'discharge';
-                } else if (isLowPrice && canCharge && currentSoC < params.socMax * 0.7) {
-                    // Charge on low prices if SoC is below 70%
-                    const maxCharge = Math.min(
-                        params.pMax * 0.8,
-                        (params.socMax - currentSoC) / params.efficiency
-                    );
-                    charge = maxCharge * 0.8;
-                    currentSoC += charge * params.efficiency;
-                    action = 'charge';
-                } else if (isMediumPrice) {
-                    // On medium prices, balance SoC towards middle
-                    if (currentSoC > params.socMax * 0.6 && canDischarge) {
-                        // Discharge if too high
-                        const maxDischarge = Math.min(
-                            params.pMax * 0.6,
-                            currentSoC - params.socMin
-                        );
-                        discharge = maxDischarge * 0.6;
-                        currentSoC -= discharge;
-                        action = 'discharge';
-                    } else if (currentSoC < params.socMax * 0.4 && canCharge) {
-                        // Charge if too low
-                        const maxCharge = Math.min(
-                            params.pMax * 0.6,
-                            (params.socMax - currentSoC) / params.efficiency
-                        );
-                        charge = maxCharge * 0.6;
-                        currentSoC += charge * params.efficiency;
-                        action = 'charge';
+
+                // Revenue calculation
+                totalRevenue += pDischarge[t] * price - pCharge[t] * price;
+
+                // State-based penalties (like in Mathematica code)
+                if (state === 1) { // Charging state
+                    if (pDischarge[t] > 0) {
+                        totalPenalty += penaltyWeight * pDischarge[t]; // Penalty for discharging
                     }
+                    // Incentive to charge
+                    totalUtilization += utilizationWeight * (pCharge[t] / params.pMax);
+                } else if (state === 3) { // Discharging state
+                    if (pCharge[t] > 0) {
+                        totalPenalty += penaltyWeight * pCharge[t]; // Penalty for charging
+                    }
+                    // Incentive to discharge
+                    totalUtilization += utilizationWeight * (pDischarge[t] / params.pMax);
+                } else if (state === 2) { // Idle state
+                    if (pCharge[t] > 0 || pDischarge[t] > 0) {
+                        totalPenalty += penaltyWeight * (pCharge[t] + pDischarge[t]); // Penalty for any action
+                    }
+                }
+
+                // SoC bounds penalty
+                if (soc[t] < params.socMin) {
+                    totalPenalty += penaltyWeight * Math.pow(params.socMin - soc[t], 2);
+                }
+                if (soc[t] > params.socMax) {
+                    totalPenalty += penaltyWeight * Math.pow(soc[t] - params.socMax, 2);
                 }
             }
 
-            // Store calculated values for the current hour.
-            schedule.charging[t] = charge;
-            schedule.discharging[t] = discharge;
-            schedule.soc[t] = Math.max(params.socMin, Math.min(params.socMax, currentSoC)); // Ensure SoC stays within bounds
-            schedule.revenue[t] = discharge * price - charge * price; // Calculate hourly revenue
-            schedule.actions[t] = action;
+            const objective = totalRevenue + totalUtilization - totalPenalty;
 
-            currentSoC = schedule.soc[t]; // Update current SoC for next iteration
+            // Backward pass: calculate gradients and update variables
+            for (let t = 0; t < T; t++) {
+                const state = viterbiPath[t];
+                const price = prices[t];
+
+                // Gradient for pCharge[t]
+                let gradCharge = -price; // Revenue gradient
+                if (state === 1) {
+                    gradCharge += utilizationWeight / params.pMax; // Utilization incentive
+                } else if (state === 3) {
+                    gradCharge -= penaltyWeight; // State violation penalty
+                } else if (state === 2) {
+                    gradCharge -= penaltyWeight; // State violation penalty
+                }
+
+                // Gradient for pDischarge[t]
+                let gradDischarge = price; // Revenue gradient
+                if (state === 3) {
+                    gradDischarge += utilizationWeight / params.pMax; // Utilization incentive
+                } else if (state === 1) {
+                    gradDischarge -= penaltyWeight; // State violation penalty
+                } else if (state === 2) {
+                    gradDischarge -= penaltyWeight; // State violation penalty
+                }
+
+                // Update variables with gradient descent
+                pCharge[t] = Math.max(0, Math.min(params.pMax, pCharge[t] + learningRate * gradCharge));
+                pDischarge[t] = Math.max(0, Math.min(params.pMax, pDischarge[t] + learningRate * gradDischarge));
+            }
+
+            // Early stopping if objective is stable
+            if (iteration > 100 && Math.abs(objective) < 1e-6) {
+                break;
+            }
+        }
+
+        // Final forward pass to get the optimized schedule
+        for (let t = 0; t < T; t++) {
+            const state = viterbiPath[t];
+            const price = prices[t];
+
+            // Update SoC
+            if (t > 0) {
+                soc[t] = soc[t-1] + params.efficiency * pCharge[t-1] - pDischarge[t-1] / params.efficiency;
+            }
+
+            // Ensure SoC stays within bounds
+            soc[t] = Math.max(params.socMin, Math.min(params.socMax, soc[t]));
+
+            // Store results
+            schedule.charging[t] = pCharge[t];
+            schedule.discharging[t] = pDischarge[t];
+            schedule.soc[t] = soc[t];
+            schedule.revenue[t] = pDischarge[t] * price - pCharge[t] * price;
+            schedule.actions[t] = pCharge[t] > 0 ? 'charge' : (pDischarge[t] > 0 ? 'discharge' : 'idle');
         }
 
         return schedule;
