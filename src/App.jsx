@@ -170,6 +170,35 @@ const App = () => {
     }
   }, [setStatusMessage])
 
+  // Test optimizer with real data format
+  const testOptimizerWithRealData = useCallback(async () => {
+    setStatusMessage({ type: 'info', text: 'Testing optimizer with real data format...' })
+    try {
+      // Load a small sample of real data
+      const data = await loadPolishData()
+      const sampleData = data.slice(0, 48) // Get 48 hours (2 days)
+      const prices = sampleData.map(record => record.price)
+      
+      console.log('Testing optimizer with real data format:')
+      console.log('Sample data records:', sampleData.slice(0, 3))
+      console.log('Prices:', prices)
+      
+      const testParams = { socMin: 10, socMax: 50, pMax: 5, efficiency: 0.85 }
+      const result = optimizer.optimize(prices, testParams)
+      
+      if (result.success) {
+        setStatusMessage({ 
+          type: 'success', 
+          text: `Real data test successful! Revenue: ${result.totalRevenue}, Data points: ${prices.length}` 
+        })
+      } else {
+        setStatusMessage({ type: 'error', text: `Real data test failed: ${result.error}` })
+      }
+    } catch (error) {
+      setStatusMessage({ type: 'error', text: `Real data test error: ${error.message}` })
+    }
+  }, [setStatusMessage])
+
   // Load quick presets
   const loadQuickPresets = useCallback(() => {
     const presets = [
@@ -243,11 +272,15 @@ const App = () => {
       console.log(`Number of analysis periods: ${groupKeys.length}`)
       console.log(`Period keys:`, groupKeys.slice(0, 5))
       
-      // Log sample data from first few groups
+      // Log detailed sample data from first few groups
       for (let i = 0; i < Math.min(3, groupKeys.length); i++) {
         const key = groupKeys[i];
         const groupData = groups[key];
-        console.log(`Group ${key}: ${groupData.length} records, price range: ${Math.min(...groupData.map(r => r.price))} - ${Math.max(...groupData.map(r => r.price))}`);
+        const prices = groupData.map(r => r.price);
+        console.log(`Group ${key}: ${groupData.length} records`);
+        console.log(`  Price range: ${Math.min(...prices)} - ${Math.max(...prices)}`);
+        console.log(`  Sample prices:`, prices.slice(0, 10));
+        console.log(`  Sample datetimes:`, groupData.slice(0, 3).map(r => r.datetime));
       }
 
       setProgressText(`Analyzing ${groupKeys.length} periods...`)
@@ -259,26 +292,37 @@ const App = () => {
         const groupData = groups[key]
         const prices = groupData.map(record => record.price)
 
-        if (prices.length > 24) {
+        console.log(`Processing period ${key}: ${prices.length} data points`)
+        console.log(`Price range: ${Math.min(...prices)} - ${Math.max(...prices)}`)
+        console.log(`Sample prices:`, prices.slice(0, 5))
+
+        if (prices.length >= 24) {
           console.log(`Attempting optimization for period ${key} with ${prices.length} data points`)
-          console.log(`Price range: ${Math.min(...prices)} - ${Math.max(...prices)}`)
           console.log(`Parameters:`, params)
           
-          const result = optimizer.optimize(prices, params)
-          
-          if (result.success) {
-            console.log(`✓ Optimization successful for period ${key}`)
-            results.push({
-              period: key,
-              periodStart: groupData[0].datetime,
-              periodEnd: groupData[groupData.length - 1].datetime,
-              dataPoints: prices.length,
-              prices: prices,
-              ...result
-            })
-          } else {
-            console.error(`✗ Optimization failed for period ${key}:`, result.error)
-            console.error(`Error details:`, result)
+          try {
+            const result = optimizer.optimize(prices, params)
+            
+            if (result.success) {
+              console.log(`✓ Optimization successful for period ${key}`)
+              console.log(`  Revenue: ${result.totalRevenue}`)
+              console.log(`  Energy charged: ${result.totalEnergyCharged}`)
+              console.log(`  Energy discharged: ${result.totalEnergyDischarged}`)
+              results.push({
+                period: key,
+                periodStart: groupData[0].datetime,
+                periodEnd: groupData[groupData.length - 1].datetime,
+                dataPoints: prices.length,
+                prices: prices,
+                ...result
+              })
+            } else {
+              console.error(`✗ Optimization failed for period ${key}:`, result.error)
+              console.error(`Error details:`, result)
+            }
+          } catch (optimizationError) {
+            console.error(`✗ Optimization threw exception for period ${key}:`, optimizationError)
+            console.error(`Exception stack:`, optimizationError.stack)
           }
         } else {
           console.warn(`Skipping period ${key} due to insufficient data points (${prices.length} < 24).`)
@@ -485,10 +529,17 @@ Based on these metrics, what are the key takeaways? Suggest 1-3 actionable strat
               </button>
               <button
                 onClick={testOptimizer}
-                className="amiga-tab w-full"
+                className="amiga-tab w-full mb-2"
               >
                 <AlertCircle className="h-3 w-3 inline mr-1" />
                 Test Optimizer
+              </button>
+              <button
+                onClick={testOptimizerWithRealData}
+                className="amiga-tab w-full"
+              >
+                <Info className="h-3 w-3 inline mr-1" />
+                Test Real Data
               </button>
             </div>
           </div>
