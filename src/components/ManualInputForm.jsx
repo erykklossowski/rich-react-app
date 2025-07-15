@@ -101,11 +101,11 @@ const ManualInputForm = ({ onOptimize, onGenerateSample }) => {
               />
             </div>
 
-            {/* SoC Range - Two Sliders */}
+            {/* SoC Configuration - Two Sliders */}
             <div className="space-y-2">
               <label className="text-xs font-bold flex items-center gap-1">
                 <Battery className="h-3 w-3" />
-                SoC Range: {formatNumber(socMin)}-{formatNumber(socMax)} MWh
+                Battery Capacity Configuration
               </label>
               <div className="space-y-3">
                 {/* Max SoC Slider */}
@@ -119,11 +119,11 @@ const ManualInputForm = ({ onOptimize, onGenerateSample }) => {
                     onValueChange={(value) => {
                       const socFactor = value[0]
                       const newMax = pMax * socFactor
-                      // Adjust min SoC to maintain current DoD percentage
+                      // Keep the same DoD percentage when Max SoC changes
                       const currentDoDPercent = ((socMax - socMin) / socMax) * 100
                       const newMin = newMax * (1 - currentDoDPercent / 100)
-                      setSocMin(newMin)
                       setSocMax(newMax)
+                      setSocMin(newMin)
                     }}
                     max={6}
                     min={1}

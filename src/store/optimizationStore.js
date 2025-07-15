@@ -48,8 +48,8 @@ export const useOptimizationStore = create(
         
         return { 
           pMax: value,
-          socMin: newSocMin,
-          socMax: newSocMax
+          socMax: newSocMax,
+          socMin: newSocMin
         }
       }),
       setSocMin: (value) => set({ socMin: value }),

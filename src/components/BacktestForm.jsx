@@ -156,7 +156,7 @@ const BacktestForm = ({ onRunBacktest, onLoadPresets, onTestConnection }) => {
                   />
                 </div>
                 <div>
-                  <label className="text-xs">SoC Range: {formatNumber(backtestParams.socMin)}-{formatNumber(backtestParams.socMax)} MWh</label>
+                  <label className="text-xs">Battery Capacity Configuration</label>
                   <div className="space-y-3">
                     {/* Max SoC Slider */}
                     <div>
@@ -169,11 +169,11 @@ const BacktestForm = ({ onRunBacktest, onLoadPresets, onTestConnection }) => {
                         onValueChange={(value) => {
                           const socFactor = value[0]
                           const newMax = backtestParams.pMax * socFactor
-                          // Adjust min SoC to maintain current DoD percentage
+                          // Keep the same DoD percentage when Max SoC changes
                           const currentDoDPercent = ((backtestParams.socMax - backtestParams.socMin) / backtestParams.socMax) * 100
                           const newMin = newMax * (1 - currentDoDPercent / 100)
-                          handleSliderChange([newMin], 'socMin')
                           handleSliderChange([newMax], 'socMax')
+                          handleSliderChange([newMin], 'socMin')
                         }}
                         max={6}
                         min={1}
