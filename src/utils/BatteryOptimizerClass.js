@@ -262,26 +262,52 @@ class BatteryOptimizer {
             }
         }
 
+        // Debug: Log optimization results
+        console.log('Optimization Debug:');
+        console.log('Params:', { socMin: params.socMin, socMax: params.socMax, pMax: params.pMax, efficiency: params.efficiency });
+        console.log('SoC Range:', params.socMax - params.socMin, 'MWh');
+        console.log('Max charging power:', Math.max(...pCharge), 'MW');
+        console.log('Max discharging power:', Math.max(...pDischarge), 'MW');
+        console.log('Total charging energy:', pCharge.reduce((sum, p) => sum + p, 0), 'MWh');
+        console.log('Total discharging energy:', pDischarge.reduce((sum, p) => sum + p, 0), 'MWh');
+
         // Final forward pass to get the optimized schedule
+        let currentSoC = (params.socMin + params.socMax) / 2; // Start at middle
         for (let t = 0; t < T; t++) {
             const state = viterbiPath[t];
             const price = prices[t];
 
-            // Update SoC
+            // Calculate SoC evolution correctly
             if (t > 0) {
-                soc[t] = soc[t-1] + params.efficiency * pCharge[t-1] - pDischarge[t-1] / params.efficiency;
+                // Apply charging/discharging from previous hour to current SoC
+                const energyCharged = pCharge[t-1] * params.efficiency; // Energy added to battery
+                const energyDischarged = pDischarge[t-1]; // Energy removed from battery
+                currentSoC = currentSoC + energyCharged - energyDischarged;
             }
 
             // Ensure SoC stays within bounds
-            soc[t] = Math.max(params.socMin, Math.min(params.socMax, soc[t]));
+            currentSoC = Math.max(params.socMin, Math.min(params.socMax, currentSoC));
 
             // Store results
             schedule.charging[t] = pCharge[t];
             schedule.discharging[t] = pDischarge[t];
-            schedule.soc[t] = soc[t];
+            schedule.soc[t] = currentSoC;
             schedule.revenue[t] = pDischarge[t] * price - pCharge[t] * price;
             schedule.actions[t] = pCharge[t] > 0 ? 'charge' : (pDischarge[t] > 0 ? 'discharge' : 'idle');
+
+            // Debug: Log SoC evolution
+            if (t < 5 || t > T - 5) { // Log first and last 5 time steps
+                console.log(`Time ${t}: SoC=${currentSoC.toFixed(2)}, Charge=${pCharge[t].toFixed(2)}, Discharge=${pDischarge[t].toFixed(2)}, Revenue=${schedule.revenue[t].toFixed(2)}`);
+            }
         }
+
+        // Debug: Log final SoC statistics
+        const socValues = schedule.soc;
+        console.log('Final SoC Statistics:');
+        console.log('Min SoC:', Math.min(...socValues).toFixed(2), 'MWh');
+        console.log('Max SoC:', Math.max(...socValues).toFixed(2), 'MWh');
+        console.log('SoC Range Used:', (Math.max(...socValues) - Math.min(...socValues)).toFixed(2), 'MWh');
+        console.log('SoC Range Utilization:', ((Math.max(...socValues) - Math.min(...socValues)) / (params.socMax - params.socMin) * 100).toFixed(1) + '%');
 
         return schedule;
     }
