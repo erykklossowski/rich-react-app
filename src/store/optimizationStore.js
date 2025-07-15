@@ -41,10 +41,10 @@ export const useOptimizationStore = create(
       setPMax: (value) => set((state) => {
         // Update SoC values to maintain consistency with new pMax
         const currentMaxFactor = state.socMax / state.pMax
-        const currentDoDPercent = ((state.socMax - state.socMin) / state.socMax) * 100
+        const currentDoD = state.socMax - state.socMin
         
         const newSocMax = value * currentMaxFactor
-        const newSocMin = newSocMax * (1 - currentDoDPercent / 100)
+        const newSocMin = Math.max(0, newSocMax - currentDoD)
         
         return { 
           pMax: value,
@@ -91,10 +91,10 @@ export const useOptimizationStore = create(
         // If pMax is being updated, adjust SoC values accordingly
         if (updates.pMax !== undefined) {
           const currentMaxFactor = state.backtestParams.socMax / state.backtestParams.pMax
-          const currentDoDPercent = ((state.backtestParams.socMax - state.backtestParams.socMin) / state.backtestParams.socMax) * 100
+          const currentDoD = state.backtestParams.socMax - state.backtestParams.socMin
           
           newParams.socMax = updates.pMax * currentMaxFactor
-          newParams.socMin = newParams.socMax * (1 - currentDoDPercent / 100)
+          newParams.socMin = Math.max(0, newParams.socMax - currentDoD)
         }
         
         return {

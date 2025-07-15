@@ -191,10 +191,18 @@ class BatteryOptimizer {
                     if (pDischarge[t] > 0) {
                         totalPenalty += penaltyWeight * pDischarge[t]; // Penalty for discharging
                     }
-                    // Strong incentive to charge to max SoC
-                    totalUtilization += utilizationWeight * (pCharge[t] / params.pMax);
-                    if (currentSoC < params.socMax * 0.8) {
-                        totalUtilization += utilizationWeight * pCharge[t]; // Strong incentive to charge when below 80%
+                    // Only charge if price is below threshold
+                    const avgPrice = prices.reduce((sum, p) => sum + p, 0) / prices.length;
+                    const priceThreshold = avgPrice * 0.5;
+                    
+                    if (price < priceThreshold && price > 0) { // Only charge if price is below threshold AND positive
+                        totalUtilization += utilizationWeight * (pCharge[t] / params.pMax);
+                        if (currentSoC < params.socMax * 0.8) {
+                            totalUtilization += utilizationWeight * 0.1 * pCharge[t]; // Reduced incentive
+                        }
+                    } else {
+                        // Penalty for charging at high prices or negative prices
+                        totalPenalty += penaltyWeight * 0.1 * pCharge[t];
                     }
                 } else if (state === 3) { // Discharging state
                     if (pCharge[t] > 0) {
@@ -240,9 +248,18 @@ class BatteryOptimizer {
                 // Gradient for pCharge[t]
                 let gradCharge = -price; // Revenue gradient
                 if (state === 1) {
-                    gradCharge += utilizationWeight / params.pMax; // Utilization incentive
-                    if (currentSoC < params.socMax * 0.8) {
-                        gradCharge += utilizationWeight; // Strong incentive to charge when below 80%
+                    // Only charge if price is below a reasonable threshold (e.g., 50% of average price)
+                    const avgPrice = prices.reduce((sum, p) => sum + p, 0) / prices.length;
+                    const priceThreshold = avgPrice * 0.5; // Only charge when price is below 50% of average
+                    
+                    if (price < priceThreshold && price > 0) { // Only charge if price is below threshold AND positive
+                        gradCharge += utilizationWeight / params.pMax; // Utilization incentive
+                        if (currentSoC < params.socMax * 0.8) {
+                            gradCharge += utilizationWeight * 0.1; // Reduced incentive to charge when below 80%
+                        }
+                    } else {
+                        // Strong penalty for charging at high prices or negative prices
+                        gradCharge -= penaltyWeight * 0.1;
                     }
                 } else if (state === 3) {
                     gradCharge -= penaltyWeight; // State violation penalty
@@ -284,12 +301,18 @@ class BatteryOptimizer {
         }
 
         // Collect debug information
+        // Calculate average price for threshold
+        const avgPrice = prices.reduce((sum, p) => sum + p, 0) / prices.length;
+        const priceThreshold = avgPrice * 0.5;
+        
         debugReport.params = {
             socMin: params.socMin,
             socMax: params.socMax,
             pMax: params.pMax,
             efficiency: params.efficiency,
-            socRange: params.socMax - params.socMin
+            socRange: params.socMax - params.socMin,
+            avgPrice: avgPrice,
+            priceThreshold: priceThreshold
         };
 
         debugReport.optimization = {

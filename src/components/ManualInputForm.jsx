@@ -119,9 +119,9 @@ const ManualInputForm = ({ onOptimize, onGenerateSample }) => {
                     onValueChange={(value) => {
                       const socFactor = value[0]
                       const newMax = pMax * socFactor
-                      // Keep the same DoD percentage when Max SoC changes
-                      const currentDoDPercent = ((socMax - socMin) / socMax) * 100
-                      const newMin = newMax * (1 - currentDoDPercent / 100)
+                      // Keep the same absolute DoD when Max SoC changes
+                      const currentDoD = socMax - socMin
+                      const newMin = Math.max(0, newMax - currentDoD)
                       setSocMax(newMax)
                       setSocMin(newMin)
                     }}
@@ -139,24 +139,23 @@ const ManualInputForm = ({ onOptimize, onGenerateSample }) => {
                 {/* DoD Slider */}
                 <div>
                   <div className="flex justify-between text-xs mb-1">
-                    <span>Depth of Discharge</span>
-                    <span>{((socMax - socMin) / socMax * 100).toFixed(1)}% ({formatNumber(socMax - socMin)} MWh)</span>
+                    <span>Depth of Discharge (Min SoC)</span>
+                    <span>{formatNumber(socMin)} MWh (Range: {formatNumber(socMax - socMin)} MWh)</span>
                   </div>
                   <Slider
-                    value={[(socMax - socMin) / socMax * 100]}
+                    value={[socMin]}
                     onValueChange={(value) => {
-                      const dodPercent = value[0]
-                      const newMin = socMax * (1 - dodPercent / 100)
+                      const newMin = value[0]
                       setSocMin(newMin)
                     }}
-                    max={50}
+                    max={socMax * 0.9}
                     min={0}
-                    step={1}
+                    step={0.1}
                     className="w-full"
                   />
                   <div className="flex justify-between text-xs">
-                    <span>0%</span>
-                    <span>50%</span>
+                    <span>0 MWh</span>
+                    <span>{formatNumber(socMax * 0.9)} MWh</span>
                   </div>
                 </div>
               </div>

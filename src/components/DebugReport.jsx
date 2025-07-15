@@ -19,7 +19,9 @@ const DebugReport = ({ debugReport }) => {
         table += `| Max SoC | ${report.params.socMax} MWh |\n`;
         table += `| SoC Range | ${report.params.socRange} MWh |\n`;
         table += `| Max Power | ${report.params.pMax} MW |\n`;
-        table += `| Efficiency | ${(report.params.efficiency * 100).toFixed(1)}% |\n\n`;
+        table += `| Efficiency | ${(report.params.efficiency * 100).toFixed(1)}% |\n`;
+        table += `| Avg Price | ${report.params.avgPrice?.toFixed(2) || 'N/A'} $/MWh |\n`;
+        table += `| Price Threshold | ${report.params.priceThreshold?.toFixed(2) || 'N/A'} $/MWh |\n\n`;
         
         // Optimization Results
         table += `## Optimization Results\n`;
@@ -117,6 +119,8 @@ const DebugReport = ({ debugReport }) => {
                                 <div>SoC Range: {debugReport.params.socRange} MWh</div>
                                 <div>Max Power: {debugReport.params.pMax} MW</div>
                                 <div>Efficiency: {(debugReport.params.efficiency * 100).toFixed(1)}%</div>
+                                <div>Avg Price: {debugReport.params.avgPrice?.toFixed(2) || 'N/A'} $/MWh</div>
+                                <div>Price Threshold: {debugReport.params.priceThreshold?.toFixed(2) || 'N/A'} $/MWh</div>
                             </div>
                         </div>
 

@@ -169,9 +169,9 @@ const BacktestForm = ({ onRunBacktest, onLoadPresets, onTestConnection }) => {
                         onValueChange={(value) => {
                           const socFactor = value[0]
                           const newMax = backtestParams.pMax * socFactor
-                          // Keep the same DoD percentage when Max SoC changes
-                          const currentDoDPercent = ((backtestParams.socMax - backtestParams.socMin) / backtestParams.socMax) * 100
-                          const newMin = newMax * (1 - currentDoDPercent / 100)
+                          // Keep the same absolute DoD when Max SoC changes
+                          const currentDoD = backtestParams.socMax - backtestParams.socMin
+                          const newMin = Math.max(0, newMax - currentDoD)
                           handleSliderChange([newMax], 'socMax')
                           handleSliderChange([newMin], 'socMin')
                         }}
@@ -189,24 +189,23 @@ const BacktestForm = ({ onRunBacktest, onLoadPresets, onTestConnection }) => {
                     {/* DoD Slider */}
                     <div>
                       <div className="flex justify-between text-xs mb-1">
-                        <span>Depth of Discharge</span>
-                        <span>{((backtestParams.socMax - backtestParams.socMin) / backtestParams.socMax * 100).toFixed(1)}% ({formatNumber(backtestParams.socMax - backtestParams.socMin)} MWh)</span>
+                        <span>Depth of Discharge (Min SoC)</span>
+                        <span>{formatNumber(backtestParams.socMin)} MWh (Range: {formatNumber(backtestParams.socMax - backtestParams.socMin)} MWh)</span>
                       </div>
                       <Slider
-                        value={[(backtestParams.socMax - backtestParams.socMin) / backtestParams.socMax * 100]}
+                        value={[backtestParams.socMin]}
                         onValueChange={(value) => {
-                          const dodPercent = value[0]
-                          const newMin = backtestParams.socMax * (1 - dodPercent / 100)
+                          const newMin = value[0]
                           handleSliderChange([newMin], 'socMin')
                         }}
-                        max={50}
+                        max={backtestParams.socMax * 0.9}
                         min={0}
-                        step={1}
+                        step={0.1}
                         className="w-full"
                       />
                       <div className="flex justify-between text-xs">
-                        <span>0%</span>
-                        <span>50%</span>
+                        <span>0 MWh</span>
+                        <span>{formatNumber(backtestParams.socMax * 0.9)} MWh</span>
                       </div>
                     </div>
                   </div>
