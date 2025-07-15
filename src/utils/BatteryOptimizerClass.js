@@ -176,24 +176,46 @@ class BatteryOptimizer {
             const canCharge = currentSoC < params.socMax - 0.01;
             const canDischarge = currentSoC > params.socMin + 0.01;
 
-            // State-based decision logic with aggressive SoC range utilization
+            // Enhanced state-based decision logic with realistic SoC operation and optimization elements
+            const socUtilization = (currentSoC - params.socMin) / (params.socMax - params.socMin);
+            const priceRatio = price / avgPrice;
+            
+            // State-based decision logic with realistic SoC constraints and optimization elements
             if (state === 1 && (isLowPrice || isMediumPrice) && canCharge) {
-                // Charge aggressively on low/medium prices when in low price state
+                // Charge on low/medium prices when in low price state
                 const maxCharge = Math.min(
                     params.pMax, // Limited by max power
                     (params.socMax - currentSoC) / params.efficiency // Limited by remaining capacity and efficiency
                 );
-                charge = maxCharge; // Use full available capacity
-                currentSoC += charge * params.efficiency; // Update SoC with efficiency loss
+                
+                // Optimization: Scale charging based on price advantage and SoC level
+                let chargeFactor = 1.0;
+                if (isLowPrice) {
+                    chargeFactor = Math.min(1.0, 0.7 + (0.3 * (1 - priceRatio))); // Scale by price advantage
+                } else {
+                    chargeFactor = Math.min(0.8, 0.5 + (0.3 * (1 - socUtilization))); // Scale by SoC utilization
+                }
+                
+                charge = maxCharge * chargeFactor;
+                currentSoC += charge * params.efficiency;
                 action = 'charge';
             } else if (state === 3 && (isHighPrice || isMediumPrice) && canDischarge) {
-                // Discharge aggressively on high/medium prices when in high price state
+                // Discharge on high/medium prices when in high price state
                 const maxDischarge = Math.min(
                     params.pMax, // Limited by max power
                     currentSoC - params.socMin // Limited by available energy
                 );
-                discharge = maxDischarge; // Use full available capacity
-                currentSoC -= discharge; // Update SoC
+                
+                // Optimization: Scale discharging based on price advantage and SoC level
+                let dischargeFactor = 1.0;
+                if (isHighPrice) {
+                    dischargeFactor = Math.min(1.0, 0.7 + (0.3 * priceRatio)); // Scale by price advantage
+                } else {
+                    dischargeFactor = Math.min(0.8, 0.5 + (0.3 * socUtilization)); // Scale by SoC utilization
+                }
+                
+                discharge = maxDischarge * dischargeFactor;
+                currentSoC -= discharge;
                 action = 'discharge';
             } else if (state === 2 && isHighPrice && canDischarge) {
                 // Discharge on high prices when in medium price state
@@ -201,7 +223,10 @@ class BatteryOptimizer {
                     params.pMax,
                     currentSoC - params.socMin
                 );
-                discharge = maxDischarge; // Use full available capacity
+                
+                // Optimization: Conservative discharging in medium state
+                const dischargeFactor = Math.min(0.9, 0.6 + (0.3 * socUtilization));
+                discharge = maxDischarge * dischargeFactor;
                 currentSoC -= discharge;
                 action = 'discharge';
             } else if (state === 2 && isLowPrice && canCharge) {
@@ -210,25 +235,28 @@ class BatteryOptimizer {
                     params.pMax,
                     (params.socMax - currentSoC) / params.efficiency
                 );
-                charge = maxCharge; // Use full available capacity
+                
+                // Optimization: Conservative charging in medium state
+                const chargeFactor = Math.min(0.9, 0.6 + (0.3 * (1 - socUtilization)));
+                charge = maxCharge * chargeFactor;
                 currentSoC += charge * params.efficiency;
                 action = 'charge';
-            } else if (state === 2 && isMediumPrice && canCharge && currentSoC < params.socMax * 0.6) {
-                // Charge on medium prices when in medium state and SoC is low
+            } else if (state === 2 && isMediumPrice && canCharge && currentSoC < params.socMax * 0.5) {
+                // Charge on medium prices when in medium state and SoC is low (realistic threshold)
                 const maxCharge = Math.min(
-                    params.pMax * 0.8,
+                    params.pMax * 0.6, // Conservative power usage
                     (params.socMax - currentSoC) / params.efficiency
                 );
-                charge = maxCharge;
+                charge = maxCharge * 0.7; // Conservative charging
                 currentSoC += charge * params.efficiency;
                 action = 'charge';
-            } else if (state === 2 && isMediumPrice && canDischarge && currentSoC > params.socMax * 0.4) {
-                // Discharge on medium prices when in medium state and SoC is high
+            } else if (state === 2 && isMediumPrice && canDischarge && currentSoC > params.socMax * 0.5) {
+                // Discharge on medium prices when in medium state and SoC is high (realistic threshold)
                 const maxDischarge = Math.min(
-                    params.pMax * 0.8,
+                    params.pMax * 0.6, // Conservative power usage
                     currentSoC - params.socMin
                 );
-                discharge = maxDischarge;
+                discharge = maxDischarge * 0.7; // Conservative discharging
                 currentSoC -= discharge;
                 action = 'discharge';
             }
