@@ -176,42 +176,42 @@ class BatteryOptimizer {
             const canCharge = currentSoC < params.socMax - 0.01;
             const canDischarge = currentSoC > params.socMin + 0.01;
 
-            // Enhanced state-based decision logic with realistic SoC operation and optimization elements
+            // Aggressive state-based decision logic to maximize SoC range utilization
             const socUtilization = (currentSoC - params.socMin) / (params.socMax - params.socMin);
             const priceRatio = price / avgPrice;
             
-            // State-based decision logic with realistic SoC constraints and optimization elements
+            // State-based decision logic with aggressive SoC range utilization
             if (state === 1 && (isLowPrice || isMediumPrice) && canCharge) {
-                // Charge on low/medium prices when in low price state
+                // Charge aggressively on low/medium prices when in low price state
                 const maxCharge = Math.min(
                     params.pMax, // Limited by max power
                     (params.socMax - currentSoC) / params.efficiency // Limited by remaining capacity and efficiency
                 );
                 
-                // Optimization: Scale charging based on price advantage and SoC level
+                // Aggressive charging: Use 90-100% of available capacity
                 let chargeFactor = 1.0;
                 if (isLowPrice) {
-                    chargeFactor = Math.min(1.0, 0.7 + (0.3 * (1 - priceRatio))); // Scale by price advantage
+                    chargeFactor = 1.0; // Full capacity on low prices
                 } else {
-                    chargeFactor = Math.min(0.8, 0.5 + (0.3 * (1 - socUtilization))); // Scale by SoC utilization
+                    chargeFactor = Math.min(1.0, 0.9 + (0.1 * (1 - socUtilization))); // 90-100% based on SoC
                 }
                 
                 charge = maxCharge * chargeFactor;
                 currentSoC += charge * params.efficiency;
                 action = 'charge';
             } else if (state === 3 && (isHighPrice || isMediumPrice) && canDischarge) {
-                // Discharge on high/medium prices when in high price state
+                // Discharge aggressively on high/medium prices when in high price state
                 const maxDischarge = Math.min(
                     params.pMax, // Limited by max power
                     currentSoC - params.socMin // Limited by available energy
                 );
                 
-                // Optimization: Scale discharging based on price advantage and SoC level
+                // Aggressive discharging: Use 90-100% of available capacity
                 let dischargeFactor = 1.0;
                 if (isHighPrice) {
-                    dischargeFactor = Math.min(1.0, 0.7 + (0.3 * priceRatio)); // Scale by price advantage
+                    dischargeFactor = 1.0; // Full capacity on high prices
                 } else {
-                    dischargeFactor = Math.min(0.8, 0.5 + (0.3 * socUtilization)); // Scale by SoC utilization
+                    dischargeFactor = Math.min(1.0, 0.9 + (0.1 * socUtilization)); // 90-100% based on SoC
                 }
                 
                 discharge = maxDischarge * dischargeFactor;
@@ -224,8 +224,8 @@ class BatteryOptimizer {
                     currentSoC - params.socMin
                 );
                 
-                // Optimization: Conservative discharging in medium state
-                const dischargeFactor = Math.min(0.9, 0.6 + (0.3 * socUtilization));
+                // Aggressive discharging in medium state on high prices
+                const dischargeFactor = Math.min(1.0, 0.8 + (0.2 * socUtilization));
                 discharge = maxDischarge * dischargeFactor;
                 currentSoC -= discharge;
                 action = 'discharge';
@@ -236,27 +236,27 @@ class BatteryOptimizer {
                     (params.socMax - currentSoC) / params.efficiency
                 );
                 
-                // Optimization: Conservative charging in medium state
-                const chargeFactor = Math.min(0.9, 0.6 + (0.3 * (1 - socUtilization)));
+                // Aggressive charging in medium state on low prices
+                const chargeFactor = Math.min(1.0, 0.8 + (0.2 * (1 - socUtilization)));
                 charge = maxCharge * chargeFactor;
                 currentSoC += charge * params.efficiency;
                 action = 'charge';
-            } else if (state === 2 && isMediumPrice && canCharge && currentSoC < params.socMax * 0.5) {
-                // Charge on medium prices when in medium state and SoC is low (realistic threshold)
+            } else if (state === 2 && isMediumPrice && canCharge && currentSoC < params.socMax * 0.7) {
+                // Charge on medium prices when in medium state and SoC is low
                 const maxCharge = Math.min(
-                    params.pMax * 0.6, // Conservative power usage
+                    params.pMax * 0.8, // Use 80% of max power
                     (params.socMax - currentSoC) / params.efficiency
                 );
-                charge = maxCharge * 0.7; // Conservative charging
+                charge = maxCharge * 0.9; // Use 90% of available capacity
                 currentSoC += charge * params.efficiency;
                 action = 'charge';
-            } else if (state === 2 && isMediumPrice && canDischarge && currentSoC > params.socMax * 0.5) {
-                // Discharge on medium prices when in medium state and SoC is high (realistic threshold)
+            } else if (state === 2 && isMediumPrice && canDischarge && currentSoC > params.socMax * 0.3) {
+                // Discharge on medium prices when in medium state and SoC is high
                 const maxDischarge = Math.min(
-                    params.pMax * 0.6, // Conservative power usage
+                    params.pMax * 0.8, // Use 80% of max power
                     currentSoC - params.socMin
                 );
-                discharge = maxDischarge * 0.7; // Conservative discharging
+                discharge = maxDischarge * 0.9; // Use 90% of available capacity
                 currentSoC -= discharge;
                 action = 'discharge';
             }
