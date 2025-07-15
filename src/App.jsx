@@ -100,6 +100,9 @@ const App = () => {
     setStatusMessage({ type: 'info', text: 'Running optimization...' })
     resetResults()
 
+    // Reset optimizer state to ensure fresh start
+    optimizer.reset()
+
     try {
       const prices = priceData.split(',').map(p => parseFloat(p.trim())).filter(p => !isNaN(p))
 
@@ -151,6 +154,9 @@ const App = () => {
   const testOptimizer = useCallback(() => {
     setStatusMessage({ type: 'info', text: 'Testing optimizer in browser...' })
     try {
+      // Reset optimizer state to ensure fresh start
+      optimizer.reset()
+      
       const testPrices = [50, 45, 40, 35, 30, 25, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 80, 75, 70, 65, 60, 55]
       const testParams = { socMin: 10, socMax: 50, pMax: 5, efficiency: 0.85 }
       
@@ -174,6 +180,9 @@ const App = () => {
   const testOptimizerWithRealData = useCallback(async () => {
     setStatusMessage({ type: 'info', text: 'Testing optimizer with real data format...' })
     try {
+      // Reset optimizer state to ensure fresh start
+      optimizer.reset()
+      
       // Load a small sample of real data
       const data = await loadPolishData()
       const sampleData = data.slice(0, 48) // Get 48 hours (2 days)
@@ -203,6 +212,9 @@ const App = () => {
   const testSimpleOptimization = useCallback(() => {
     setStatusMessage({ type: 'info', text: 'Testing simplified optimization...' })
     try {
+      // Reset optimizer state to ensure fresh start
+      optimizer.reset()
+      
       const result = optimizer.testSimpleOptimization()
       
       if (result.success) {
@@ -241,6 +253,9 @@ const App = () => {
     setProgress(0)
     setProgressText('Preparing backtest...')
     setStatusMessage({ type: 'info', text: 'Running historical backtest...' })
+
+    // Reset optimizer state to ensure fresh start
+    optimizer.reset()
 
     try {
       let currentPolishData = polishData

@@ -9,6 +9,14 @@ class BatteryOptimizer {
         this.viterbiPath = [];
     }
 
+    // Reset all instance state to ensure fresh start for each optimization
+    reset() {
+        this.priceCategories = [];
+        this.transitionMatrix = [];
+        this.emissionMatrix = [];
+        this.viterbiPath = [];
+    }
+
     // Categorizes prices into Low, Medium, High based on quantiles.
     categorizePrices(prices) {
         const sorted = [...prices].sort((a, b) => a - b);
@@ -610,6 +618,9 @@ class BatteryOptimizer {
     // Main optimization function that orchestrates the HMM and scheduling.
     optimize(prices, params) {
         try {
+            // Reset optimizer state to ensure fresh start
+            this.reset();
+            
             if (!prices || prices.length === 0) {
                 throw new Error('No price data provided');
             }
@@ -700,6 +711,9 @@ class BatteryOptimizer {
     // Test method to verify SoC calculation
     testSoCCalculation() {
         console.log('=== Testing SoC Calculation ===');
+        
+        // Reset optimizer state
+        this.reset();
         
         // Simple test case: 24 hours with known prices
         const testPrices = [
@@ -795,6 +809,9 @@ class BatteryOptimizer {
     // Test simplified optimization
     testSimpleOptimization() {
         console.log('=== Testing Simplified Optimization ===');
+        
+        // Reset optimizer state
+        this.reset();
         
         const testPrices = [
             50, 45, 40, 35, 30, 25,  // Low prices (should charge)
