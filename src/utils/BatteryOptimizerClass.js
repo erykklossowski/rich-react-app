@@ -232,22 +232,43 @@ class BatteryOptimizer {
                 discharging.push(individual[t * 2 + 1]);
             }
 
+            // Calculate price statistics for efficiency-aware optimization
+            const avgPrice = prices.reduce((sum, p) => sum + p, 0) / prices.length;
+            const minPrice = Math.min(...prices);
+            const maxPrice = Math.max(...prices);
+            const priceSpread = maxPrice - minPrice;
+            
+            // Efficiency-adjusted thresholds
+            const efficiencyLoss = 1 - params.efficiency; // 15% loss for 85% efficiency
+            const minProfitableSpread = avgPrice * efficiencyLoss * 3; // More conservative threshold
+            
+            // Define profitable trading zones
+            const lowPriceThreshold = avgPrice - minProfitableSpread;
+            const highPriceThreshold = avgPrice + minProfitableSpread;
+            
             // Calculate SoC evolution and check constraints
             let currentSoC = (params.socMin + params.socMax) / 2;
             let totalRevenue = 0;
             let constraintViolation = 0;
+            let inefficientTradingPenalty = 0;
 
             for (let t = 0; t < T; t++) {
                 const price = prices[t];
                 const charge = charging[t];
                 const discharge = discharging[t];
 
-                // Revenue calculation
-                totalRevenue += discharge * price - charge * price;
-
-                // Update SoC
+                // Efficiency-aware revenue calculation
                 const energyCharged = charge * params.efficiency;
                 const energyDischarged = discharge;
+                
+                // Only count revenue if we have a net positive energy flow
+                if (energyDischarged > energyCharged) {
+                    totalRevenue += (energyDischarged - energyCharged) * price;
+                } else if (energyCharged > energyDischarged) {
+                    totalRevenue -= (energyCharged - energyDischarged) * price;
+                }
+
+                // Update SoC
                 currentSoC = currentSoC + energyCharged - energyDischarged;
 
                 // SoC constraint violation penalty
@@ -264,10 +285,25 @@ class BatteryOptimizer {
                 if (charge > 0 && discharge > 0) {
                     constraintViolation += Math.pow(charge + discharge, 2) * 1e5;
                 }
+
+                // Penalty for trading outside profitable zones
+                if (charge > 0 && price > lowPriceThreshold) {
+                    // Penalty for charging when price is not low enough
+                    inefficientTradingPenalty += charge * (price - lowPriceThreshold) * 1e2;
+                }
+                if (discharge > 0 && price < highPriceThreshold) {
+                    // Penalty for discharging when price is not high enough
+                    inefficientTradingPenalty += discharge * (highPriceThreshold - price) * 1e2;
+                }
+            }
+
+            // Additional penalty for overall unprofitable strategies
+            if (totalRevenue < 0) {
+                inefficientTradingPenalty += Math.abs(totalRevenue) * 10;
             }
 
             // Return negative revenue (minimization problem) plus constraint penalties
-            return -totalRevenue + constraintViolation;
+            return -totalRevenue + constraintViolation + inefficientTradingPenalty;
         };
 
         // Differential evolution parameters
@@ -281,6 +317,20 @@ class BatteryOptimizer {
         console.log(`  Population size: ${popsize}`);
         console.log(`  Max generations: ${maxiter}`);
         console.log(`  Variables: ${bounds.length}`);
+        
+        // Log price statistics for debugging
+        const avgPrice = prices.reduce((sum, p) => sum + p, 0) / prices.length;
+        const minPrice = Math.min(...prices);
+        const maxPrice = Math.max(...prices);
+        const efficiencyLoss = 1 - params.efficiency;
+        const minProfitableSpread = avgPrice * efficiencyLoss * 3;
+        
+        console.log(`  Price range: ${minPrice.toFixed(2)} - ${maxPrice.toFixed(2)} (spread: ${(maxPrice - minPrice).toFixed(2)})`);
+        console.log(`  Average price: ${avgPrice.toFixed(2)}`);
+        console.log(`  Efficiency: ${params.efficiency} (loss: ${efficiencyLoss})`);
+        console.log(`  Min profitable spread: ${minProfitableSpread.toFixed(2)}`);
+        console.log(`  Low price threshold: ${(avgPrice - minProfitableSpread).toFixed(2)}`);
+        console.log(`  High price threshold: ${(avgPrice + minProfitableSpread).toFixed(2)}`);
 
         // Run differential evolution
         const bestSolution = this.runDifferentialEvolution(costFunction, bounds, popsize, mutate, recombination, maxiter);
