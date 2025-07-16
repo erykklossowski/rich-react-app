@@ -24,6 +24,8 @@ const App = () => {
     socMin,
     socMax,
     efficiency,
+    categorizationMethod,
+    categorizationOptions,
     statusMessage,
     optimizationResult,
     polishData,
@@ -115,7 +117,7 @@ const App = () => {
       }
 
       setTimeout(() => {
-        const result = optimizer.optimize(prices, params)
+        const result = optimizer.optimize(prices, params, categorizationMethod, categorizationOptions)
         if (result.success) {
           setStatusMessage({ type: 'success', text: 'Optimization completed successfully!' })
           setOptimizationResult({ result, prices, params, title: 'Manual Input' })
@@ -129,7 +131,7 @@ const App = () => {
       setStatusMessage({ type: 'error', text: `Error: ${error.message}` })
       setLoading(false)
     }
-  }, [priceData, pMax, socMin, socMax, efficiency, setLoading, setStatusMessage, resetResults, setOptimizationResult])
+  }, [priceData, pMax, socMin, socMax, efficiency, categorizationMethod, categorizationOptions, setLoading, setStatusMessage, resetResults, setOptimizationResult])
 
   // Test data connection
   const testDataConnection = useCallback(async () => {
@@ -161,7 +163,7 @@ const App = () => {
       const testParams = { socMin: 10, socMax: 50, pMax: 5, efficiency: 0.85 }
       
       console.log('Testing optimizer with:', { testPrices, testParams })
-      const result = optimizer.optimize(testPrices, testParams)
+      const result = optimizer.optimize(testPrices, testParams, categorizationMethod, categorizationOptions)
       
       if (result.success) {
         setStatusMessage({ 
@@ -174,7 +176,7 @@ const App = () => {
     } catch (error) {
       setStatusMessage({ type: 'error', text: `Optimizer test error: ${error.message}` })
     }
-  }, [setStatusMessage])
+  }, [setStatusMessage, categorizationMethod, categorizationOptions])
 
   // Test optimizer with real data format
   const testOptimizerWithRealData = useCallback(async () => {
@@ -193,7 +195,7 @@ const App = () => {
       console.log('Prices:', prices)
       
       const testParams = { socMin: 10, socMax: 50, pMax: 5, efficiency: 0.85 }
-      const result = optimizer.optimize(prices, testParams)
+      const result = optimizer.optimize(prices, testParams, categorizationMethod, categorizationOptions)
       
       if (result.success) {
         setStatusMessage({ 
@@ -206,7 +208,7 @@ const App = () => {
     } catch (error) {
       setStatusMessage({ type: 'error', text: `Real data test error: ${error.message}` })
     }
-  }, [setStatusMessage])
+  }, [setStatusMessage, categorizationMethod, categorizationOptions])
 
   // Test simplified optimization
   const testSimpleOptimization = useCallback(() => {
@@ -357,7 +359,7 @@ const App = () => {
           console.log(`Parameters:`, params)
           
           try {
-            const result = optimizer.optimize(prices, params)
+            const result = optimizer.optimize(prices, params, categorizationMethod, categorizationOptions)
             
             if (result.success) {
               console.log(`✓ Optimization successful for period ${key}`)
@@ -478,7 +480,7 @@ const App = () => {
       setProgress(0)
       setProgressText('')
     }
-  }, [polishData, startDate, endDate, analysisType, backtestParams, setLoading, resetResults, setProgress, setProgressText, setStatusMessage, setPolishData, setBacktestResults])
+  }, [polishData, startDate, endDate, analysisType, backtestParams, categorizationMethod, categorizationOptions, setLoading, resetResults, setProgress, setProgressText, setStatusMessage, setPolishData, setBacktestResults])
 
   // Show period detail
   const showPeriodDetail = useCallback((periodKey) => {

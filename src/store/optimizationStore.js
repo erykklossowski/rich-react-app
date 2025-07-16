@@ -10,6 +10,8 @@ export const useOptimizationStore = create(
       socMin: 10, // 1x Max Power
       socMax: 40, // 4x Max Power
       efficiency: 0.85,
+      categorizationMethod: 'zscore', // Default to best performing method
+      categorizationOptions: { lowThreshold: -0.5, highThreshold: 0.5 },
 
       // Backtest state
       startDate: '2020-01-01',
@@ -55,6 +57,8 @@ export const useOptimizationStore = create(
       setSocMin: (value) => set({ socMin: value }),
       setSocMax: (value) => set({ socMax: value }),
       setEfficiency: (value) => set({ efficiency: value }),
+      setCategorizationMethod: (method) => set({ categorizationMethod: method }),
+      setCategorizationOptions: (options) => set({ categorizationOptions: options }),
 
       setStartDate: (date) => set({ startDate: date }),
       setEndDate: (date) => set({ endDate: date }),

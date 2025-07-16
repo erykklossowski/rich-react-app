@@ -17,16 +17,241 @@ class BatteryOptimizer {
         this.viterbiPath = [];
     }
 
-    // Categorizes prices into Low, Medium, High based on quantiles.
-    categorizePrices(prices) {
+    // Enhanced price categorization with multiple methods
+    categorizePrices(prices, method = 'quantile', options = {}) {
+        switch (method) {
+            case 'quantile':
+                return this.categorizeByQuantiles(prices, options);
+            case 'kmeans':
+                return this.categorizeByKMeans(prices, options);
+            case 'volatility':
+                return this.categorizeByVolatility(prices, options);
+            case 'adaptive':
+                return this.categorizeByAdaptiveThresholds(prices, options);
+            case 'zscore':
+                return this.categorizeByZScore(prices, options);
+            default:
+                return this.categorizeByQuantiles(prices, options);
+        }
+    }
+
+    // Original quantile-based categorization
+    categorizeByQuantiles(prices, options = {}) {
+        const { lowPercentile = 33, highPercentile = 67 } = options;
         const sorted = [...prices].sort((a, b) => a - b);
-        const q33 = sorted[Math.floor(sorted.length / 3)]; // 33rd percentile
-        const q67 = sorted[Math.floor(2 * sorted.length / 3)]; // 67th percentile
+        const qLow = sorted[Math.floor(sorted.length * lowPercentile / 100)];
+        const qHigh = sorted[Math.floor(sorted.length * highPercentile / 100)];
 
         return prices.map(price => {
-            if (price <= q33) return 1; // Low price category
-            if (price <= q67) return 2; // Medium price category
+            if (price <= qLow) return 1; // Low price category
+            if (price <= qHigh) return 2; // Medium price category
             return 3; // High price category
+        });
+    }
+
+    // K-means clustering for price categorization
+    categorizeByKMeans(prices, options = {}) {
+        const { k = 3, maxIterations = 100, tolerance = 0.001 } = options;
+        
+        // Initialize centroids using k-means++ method
+        const centroids = this.kMeansPlusPlus(prices, k);
+        
+        let iterations = 0;
+        let converged = false;
+        
+        while (!converged && iterations < maxIterations) {
+            // Assign points to nearest centroid
+            const assignments = prices.map(price => {
+                let minDistance = Infinity;
+                let bestCentroid = 0;
+                
+                for (let i = 0; i < k; i++) {
+                    const distance = Math.abs(price - centroids[i]);
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        bestCentroid = i;
+                    }
+                }
+                return bestCentroid;
+            });
+            
+            // Update centroids
+            const newCentroids = Array(k).fill(0).map(() => ({ sum: 0, count: 0 }));
+            
+            for (let i = 0; i < prices.length; i++) {
+                const centroid = assignments[i];
+                newCentroids[centroid].sum += prices[i];
+                newCentroids[centroid].count++;
+            }
+            
+            // Check convergence
+            let maxChange = 0;
+            for (let i = 0; i < k; i++) {
+                if (newCentroids[i].count > 0) {
+                    const newCentroid = newCentroids[i].sum / newCentroids[i].count;
+                    const change = Math.abs(newCentroid - centroids[i]);
+                    maxChange = Math.max(maxChange, change);
+                    centroids[i] = newCentroid;
+                }
+            }
+            
+            converged = maxChange < tolerance;
+            iterations++;
+        }
+        
+        // Sort centroids to ensure consistent ordering (low to high)
+        const sortedCentroids = [...centroids].sort((a, b) => a - b);
+        const centroidMap = {};
+        sortedCentroids.forEach((centroid, index) => {
+            centroidMap[centroid] = index + 1; // 1-indexed categories
+        });
+        
+        return prices.map(price => {
+            let minDistance = Infinity;
+            let bestCentroid = 0;
+            
+            for (let i = 0; i < k; i++) {
+                const distance = Math.abs(price - centroids[i]);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    bestCentroid = centroids[i];
+                }
+            }
+            
+            return centroidMap[bestCentroid];
+        });
+    }
+
+    // K-means++ initialization
+    kMeansPlusPlus(prices, k) {
+        const centroids = [prices[Math.floor(Math.random() * prices.length)]];
+        
+        for (let i = 1; i < k; i++) {
+            const distances = prices.map(price => {
+                let minDistance = Infinity;
+                for (const centroid of centroids) {
+                    const distance = Math.pow(price - centroid, 2);
+                    minDistance = Math.min(minDistance, distance);
+                }
+                return minDistance;
+            });
+            
+            const totalDistance = distances.reduce((sum, d) => sum + d, 0);
+            let random = Math.random() * totalDistance;
+            let selectedIndex = 0;
+            
+            for (let j = 0; j < distances.length; j++) {
+                random -= distances[j];
+                if (random <= 0) {
+                    selectedIndex = j;
+                    break;
+                }
+            }
+            
+            centroids.push(prices[selectedIndex]);
+        }
+        
+        return centroids;
+    }
+
+    // Volatility-based categorization
+    categorizeByVolatility(prices, options = {}) {
+        const { windowSize = 24, volatilityThreshold = 0.1 } = options;
+        const categories = [];
+        
+        for (let i = 0; i < prices.length; i++) {
+            const start = Math.max(0, i - windowSize + 1);
+            const window = prices.slice(start, i + 1);
+            const mean = window.reduce((sum, p) => sum + p, 0) / window.length;
+            const variance = window.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / window.length;
+            const volatility = Math.sqrt(variance) / mean;
+            
+            if (volatility > volatilityThreshold) {
+                // High volatility periods - categorize based on price relative to local mean
+                if (prices[i] < mean * 0.95) {
+                    categories.push(1); // Low
+                } else if (prices[i] > mean * 1.05) {
+                    categories.push(3); // High
+                } else {
+                    categories.push(2); // Medium
+                }
+            } else {
+                // Low volatility periods - use global statistics
+                const globalMean = prices.reduce((sum, p) => sum + p, 0) / prices.length;
+                if (prices[i] < globalMean * 0.9) {
+                    categories.push(1); // Low
+                } else if (prices[i] > globalMean * 1.1) {
+                    categories.push(3); // High
+                } else {
+                    categories.push(2); // Medium
+                }
+            }
+        }
+        
+        return categories;
+    }
+
+    // Adaptive thresholds based on market conditions
+    categorizeByAdaptiveThresholds(prices, options = {}) {
+        const { sensitivity = 0.2, minSpread = 0.1 } = options;
+        const categories = [];
+        
+        // Calculate rolling statistics
+        const windowSize = Math.min(24, Math.floor(prices.length / 4));
+        const rollingStats = [];
+        
+        for (let i = 0; i < prices.length; i++) {
+            const start = Math.max(0, i - windowSize + 1);
+            const window = prices.slice(start, i + 1);
+            const mean = window.reduce((sum, p) => sum + p, 0) / window.length;
+            const std = Math.sqrt(window.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / window.length);
+            
+            rollingStats.push({ mean, std });
+        }
+        
+        // Adaptive categorization
+        for (let i = 0; i < prices.length; i++) {
+            const { mean, std } = rollingStats[i];
+            const price = prices[i];
+            
+            // Adjust thresholds based on volatility
+            let lowThreshold = mean - sensitivity * std;
+            let highThreshold = mean + sensitivity * std;
+            
+            // Ensure minimum spread
+            const spread = highThreshold - lowThreshold;
+            const minSpreadValue = mean * minSpread;
+            
+            if (spread < minSpreadValue) {
+                const adjustment = (minSpreadValue - spread) / 2;
+                lowThreshold -= adjustment;
+                highThreshold += adjustment;
+            }
+            
+            if (price <= lowThreshold) {
+                categories.push(1); // Low
+            } else if (price >= highThreshold) {
+                categories.push(3); // High
+            } else {
+                categories.push(2); // Medium
+            }
+        }
+        
+        return categories;
+    }
+
+    // Z-score based categorization
+    categorizeByZScore(prices, options = {}) {
+        const { lowThreshold = -0.5, highThreshold = 0.5 } = options;
+        const mean = prices.reduce((sum, p) => sum + p, 0) / prices.length;
+        const std = Math.sqrt(prices.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / prices.length);
+        
+        return prices.map(price => {
+            const zScore = (price - mean) / std;
+            
+            if (zScore <= lowThreshold) return 1; // Low price category
+            if (zScore >= highThreshold) return 3; // High price category
+            return 2; // Medium price category
         });
     }
 
@@ -49,8 +274,8 @@ class BatteryOptimizer {
     }
 
     // Initializes the emission matrix (probability of observing an action given a hidden state).
-    initializeEmissionMatrix(prices) {
-        const categories = this.categorizePrices(prices);
+    initializeEmissionMatrix(prices, categorizationMethod = 'quantile', categorizationOptions = {}) {
+        const categories = this.categorizePrices(prices, categorizationMethod, categorizationOptions);
         // Initialize counts for charge, idle, discharge for each of the 3 price categories.
         const categoryStats = [
             { charge: 0, idle: 0, discharge: 0 },
@@ -631,7 +856,7 @@ class BatteryOptimizer {
     }
 
     // Main optimization function that orchestrates the HMM and scheduling.
-    optimize(prices, params) {
+    optimize(prices, params, categorizationMethod = 'quantile', categorizationOptions = {}) {
         try {
             // Reset optimizer state to ensure fresh start
             this.reset();
@@ -642,9 +867,10 @@ class BatteryOptimizer {
 
             console.log(`Starting optimization with ${prices.length} price points`);
             console.log(`Parameters:`, params);
+            console.log(`Categorization method: ${categorizationMethod}`);
 
             // 1. Categorize prices to create observations for HMM.
-            this.priceCategories = this.categorizePrices(prices);
+            this.priceCategories = this.categorizePrices(prices, categorizationMethod, categorizationOptions);
             console.log(`Price categories calculated: ${this.priceCategories.length} categories`);
             
             // 2. Calculate transition probabilities between hidden states.
@@ -652,7 +878,7 @@ class BatteryOptimizer {
             console.log(`Transition matrix calculated`);
             
             // 3. Initialize emission probabilities (action likelihood given state).
-            this.emissionMatrix = this.initializeEmissionMatrix(prices);
+            this.emissionMatrix = this.initializeEmissionMatrix(prices, categorizationMethod, categorizationOptions);
             console.log(`Emission matrix initialized`);
             
             // 4. Use Viterbi to find the most likely sequence of hidden states.
@@ -1006,6 +1232,80 @@ class BatteryOptimizer {
             vwapDischarge,
             method: 'differential_evolution'
         };
+    }
+
+    // Test and compare different price categorization methods
+    testCategorizationMethods(prices, params) {
+        console.log('=== Testing Price Categorization Methods ===');
+        
+        const methods = [
+            { name: 'quantile', options: {} },
+            { name: 'kmeans', options: { k: 3, maxIterations: 50 } },
+            { name: 'volatility', options: { windowSize: 12, volatilityThreshold: 0.15 } },
+            { name: 'adaptive', options: { sensitivity: 0.3, minSpread: 0.15 } },
+            { name: 'zscore', options: { lowThreshold: -0.7, highThreshold: 0.7 } }
+        ];
+        
+        const results = {};
+        
+        for (const method of methods) {
+            console.log(`\n--- Testing ${method.name} categorization ---`);
+            
+            try {
+                // Reset optimizer state
+                this.reset();
+                
+                // Test categorization
+                const categories = this.categorizePrices(prices, method.name, method.options);
+                
+                // Count category distribution
+                const categoryCounts = categories.reduce((counts, cat) => {
+                    counts[cat] = (counts[cat] || 0) + 1;
+                    return counts;
+                }, {});
+                
+                console.log('Category distribution:', categoryCounts);
+                
+                // Run full optimization
+                const result = this.optimize(prices, params, method.name, method.options);
+                
+                if (result.success) {
+                    results[method.name] = {
+                        categories,
+                        categoryCounts,
+                        totalRevenue: result.totalRevenue,
+                        vwapCharge: result.vwapCharge,
+                        vwapDischarge: result.vwapDischarge,
+                        vwapSpread: result.vwapDischarge - result.vwapCharge,
+                        cycles: result.cycles
+                    };
+                    
+                    console.log(`✓ ${method.name}: Revenue=${result.totalRevenue.toFixed(2)}, VWAP Spread=${(result.vwapDischarge - result.vwapCharge).toFixed(2)}`);
+                } else {
+                    console.log(`✗ ${method.name}: Failed - ${result.error}`);
+                }
+                
+            } catch (error) {
+                console.log(`✗ ${method.name}: Error - ${error.message}`);
+            }
+        }
+        
+        // Compare results
+        console.log('\n=== Categorization Method Comparison ===');
+        const sortedResults = Object.entries(results)
+            .sort((a, b) => b[1].totalRevenue - a[1].totalRevenue);
+        
+        console.log('Ranking by Revenue:');
+        sortedResults.forEach(([method, result], index) => {
+            console.log(`${index + 1}. ${method}: Revenue=${result.totalRevenue.toFixed(2)}, VWAP Spread=${result.vwapSpread.toFixed(2)}, Cycles=${result.cycles.toFixed(2)}`);
+        });
+        
+        console.log('\nCategory Distribution Comparison:');
+        Object.entries(results).forEach(([method, result]) => {
+            console.log(`${method}: ${JSON.stringify(result.categoryCounts)}`);
+        });
+        
+        return results;
     }
 }
 

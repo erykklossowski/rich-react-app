@@ -6,7 +6,7 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Slider } from './ui/slider'
 import { useOptimizationStore } from '../store/optimizationStore'
-import { Battery, Zap, TrendingUp, Settings } from 'lucide-react'
+import { Battery, Zap, TrendingUp, Settings, BarChart3 } from 'lucide-react'
 import { formatNumber } from '../lib/utils'
 
 const ManualInputForm = ({ onOptimize, onGenerateSample }) => {
@@ -16,11 +16,15 @@ const ManualInputForm = ({ onOptimize, onGenerateSample }) => {
     socMin,
     socMax,
     efficiency,
+    categorizationMethod,
+    categorizationOptions,
     setPriceData,
     setPMax,
     setSocMin,
     setSocMax,
     setEfficiency,
+    setCategorizationMethod,
+    setCategorizationOptions,
     loading
   } = useOptimizationStore()
 
@@ -99,6 +103,28 @@ const ManualInputForm = ({ onOptimize, onGenerateSample }) => {
                 step={0.01}
                 className="w-full"
               />
+            </div>
+
+            {/* Price Categorization Method */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold flex items-center gap-1">
+                <BarChart3 className="h-3 w-3" />
+                Price Categorization Method
+              </label>
+              <select
+                value={categorizationMethod}
+                onChange={(e) => setCategorizationMethod(e.target.value)}
+                className="amiga-input w-full text-xs"
+              >
+                <option value="zscore">Z-score (Best Performance)</option>
+                <option value="adaptive">Adaptive Thresholds</option>
+                <option value="volatility">Volatility-based</option>
+                <option value="kmeans">K-means Clustering</option>
+                <option value="quantile">Quantile-based (Default)</option>
+              </select>
+              <p className="text-xs text-[#555555]">
+                Method for categorizing prices into Low/Medium/High
+              </p>
             </div>
 
             {/* SoC Configuration - Two Sliders */}
