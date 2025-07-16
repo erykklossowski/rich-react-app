@@ -468,7 +468,9 @@ const App = () => {
         results,
         analysisType,
         dateRange: { start: startDate, end: endDate },
-        params
+        params,
+        categorizationMethod,
+        categorizationOptions
       })
       setStatusMessage({ type: 'success', text: 'Backtest completed successfully!' })
 

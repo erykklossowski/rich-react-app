@@ -26,7 +26,7 @@ const BacktestSummary = ({ backtestResults, onShowPeriodDetail }) => {
 
   if (!backtestResults) return null
 
-  const { results, analysisType, dateRange, params } = backtestResults
+  const { results, analysisType, dateRange, params, categorizationMethod, categorizationOptions } = backtestResults
 
   // Sorting and filtering
   let filteredResults = [...results]
@@ -91,6 +91,9 @@ const BacktestSummary = ({ backtestResults, onShowPeriodDetail }) => {
           </h2>
           <p className="text-muted-foreground mt-1">
             {formatDate(dateRange.start)} to {formatDate(dateRange.end)} • {results.length} periods analyzed
+          </p>
+          <p className="text-muted-foreground text-sm">
+            Categorization Method: <span className="font-medium">{categorizationMethod}</span>
           </p>
         </div>
       </div>

@@ -14,7 +14,8 @@ import {
   Database, 
   Play,
   RotateCcw,
-  Wifi
+  Wifi,
+  BarChart3
 } from 'lucide-react'
 import { formatNumber } from '../lib/utils'
 
@@ -24,10 +25,14 @@ const BacktestForm = ({ onRunBacktest, onLoadPresets, onTestConnection }) => {
     endDate,
     analysisType,
     backtestParams,
+    categorizationMethod,
+    categorizationOptions,
     setStartDate,
     setEndDate,
     setAnalysisType,
     updateBacktestParams,
+    setCategorizationMethod,
+    setCategorizationOptions,
     loading,
     progress,
     progressText
@@ -124,6 +129,28 @@ const BacktestForm = ({ onRunBacktest, onLoadPresets, onTestConnection }) => {
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Price Categorization Method */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold flex items-center gap-1">
+                <BarChart3 className="h-3 w-3" />
+                Price Categorization Method
+              </label>
+              <select
+                value={categorizationMethod}
+                onChange={(e) => setCategorizationMethod(e.target.value)}
+                className="amiga-input text-xs w-full"
+              >
+                <option value="zscore">Z-score (Best Performance)</option>
+                <option value="adaptive">Adaptive Thresholds</option>
+                <option value="volatility">Volatility-based</option>
+                <option value="kmeans">K-means Clustering</option>
+                <option value="quantile">Quantile-based (Default)</option>
+              </select>
+              <p className="text-xs text-[#555555]">
+                Method for categorizing prices into Low/Medium/High
+              </p>
             </div>
 
             {/* Battery Parameters - Compact */}
