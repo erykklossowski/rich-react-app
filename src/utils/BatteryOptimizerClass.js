@@ -371,9 +371,9 @@ class BatteryOptimizer {
 
     // Optimizes battery charge/discharge schedule using constrained optimization
     optimizeBatterySchedule(prices, viterbiPath, params) {
-        // Use differential evolution for sophisticated optimization
-        console.log('Using differential evolution optimization');
-        return this.differentialEvolutionOptimize(prices, params);
+        // Use differential evolution for sophisticated optimization with Viterbi path guidance
+        console.log('Using differential evolution optimization with Viterbi path guidance');
+        return this.differentialEvolutionOptimize(prices, params, viterbiPath);
     }
 
     // Simplified optimization for testing - bypasses complex constraints
@@ -427,7 +427,7 @@ class BatteryOptimizer {
     }
 
     // Differential Evolution optimization for battery scheduling
-    differentialEvolutionOptimize(prices, params) {
+    differentialEvolutionOptimize(prices, params, viterbiPath) {
         const T = prices.length;
         if (T === 0) {
             return {
@@ -437,6 +437,15 @@ class BatteryOptimizer {
                 revenue: [],
                 actions: []
             };
+        }
+        
+        console.log(`Viterbi path integration: ${viterbiPath ? 'Enabled' : 'Disabled'}`);
+        if (viterbiPath && viterbiPath.length > 0) {
+            const categoryCounts = viterbiPath.reduce((counts, cat) => {
+                counts[cat] = (counts[cat] || 0) + 1;
+                return counts;
+            }, {});
+            console.log(`Viterbi path category distribution:`, categoryCounts);
         }
 
         // Define bounds for each time step (charging and discharging power)
@@ -470,6 +479,13 @@ class BatteryOptimizer {
             // Define profitable trading zones
             const lowPriceThreshold = avgPrice - minProfitableSpread;
             const highPriceThreshold = avgPrice + minProfitableSpread;
+            
+            // Viterbi path guidance: categorize prices consistently with the HMM model
+            const priceCategories = prices.map(price => {
+                if (price <= avgPrice * 0.8) return 1; // Low price category
+                if (price <= avgPrice * 1.2) return 2; // Medium price category
+                return 3; // High price category
+            });
             
             // Calculate SoC evolution and check constraints
             let currentSoC = (params.socMin + params.socMax) / 2;
@@ -511,25 +527,67 @@ class BatteryOptimizer {
                     currentSoC = params.socMax;
                 }
 
-                // Strong incentives for buying low and selling high
-                if (charge > 0) {
-                    if (price > lowPriceThreshold) {
-                        // Heavy penalty for charging when price is not low enough
-                        inefficientTradingPenalty += charge * (price - lowPriceThreshold) * 1e4;
-                    } else {
-                        // Bonus for charging at low prices
-                        inefficientTradingPenalty -= charge * (lowPriceThreshold - price) * 1e2;
+                // Viterbi path-guided trading incentives
+                if (viterbiPath && viterbiPath[t] !== undefined) {
+                    const predictedCategory = viterbiPath[t];
+                    const currentCategory = priceCategories[t];
+                    
+                    // Viterbi path guidance: follow the predicted price category sequence
+                    if (predictedCategory === 1) { // Predicted LOW price
+                        if (charge > 0) {
+                            // Bonus for charging when Viterbi predicts low prices
+                            inefficientTradingPenalty -= charge * 1e3;
+                        }
+                        if (discharge > 0) {
+                            // Heavy penalty for discharging when Viterbi predicts low prices
+                            inefficientTradingPenalty += discharge * 1e4;
+                        }
+                    } else if (predictedCategory === 3) { // Predicted HIGH price
+                        if (discharge > 0) {
+                            // Bonus for discharging when Viterbi predicts high prices
+                            inefficientTradingPenalty -= discharge * 1e3;
+                        }
+                        if (charge > 0) {
+                            // Heavy penalty for charging when Viterbi predicts high prices
+                            inefficientTradingPenalty += charge * 1e4;
+                        }
+                    } else { // Predicted MEDIUM price
+                        // Moderate penalties for both charging and discharging
+                        if (charge > 0) {
+                            inefficientTradingPenalty += charge * 1e2;
+                        }
+                        if (discharge > 0) {
+                            inefficientTradingPenalty += discharge * 1e2;
+                        }
+                    }
+                    
+                    // Additional penalty for deviation from predicted category
+                    if (currentCategory !== predictedCategory) {
+                        inefficientTradingPenalty += 500; // Penalty for category mismatch
+                    }
+                } else {
+                    // Fallback to price-based incentives when Viterbi path is not available
+                    if (charge > 0) {
+                        if (price > lowPriceThreshold) {
+                            // Heavy penalty for charging when price is not low enough
+                            inefficientTradingPenalty += charge * (price - lowPriceThreshold) * 1e4;
+                        } else {
+                            // Bonus for charging at low prices
+                            inefficientTradingPenalty -= charge * (lowPriceThreshold - price) * 1e2;
+                        }
+                    }
+                    if (discharge > 0) {
+                        if (price < highPriceThreshold) {
+                            // Heavy penalty for discharging when price is not high enough
+                            inefficientTradingPenalty += discharge * (highPriceThreshold - price) * 1e4;
+                        } else {
+                            // Bonus for discharging at high prices
+                            inefficientTradingPenalty -= discharge * (price - highPriceThreshold) * 1e2;
+                        }
                     }
                 }
-                if (discharge > 0) {
-                    if (price < highPriceThreshold) {
-                        // Heavy penalty for discharging when price is not high enough
-                        inefficientTradingPenalty += discharge * (highPriceThreshold - price) * 1e4;
-                    } else {
-                        // Bonus for discharging at high prices
-                        inefficientTradingPenalty -= discharge * (price - highPriceThreshold) * 1e2;
-                    }
-                }
+
+
             }
 
             // Additional penalty for overall unprofitable strategies
@@ -547,10 +605,25 @@ class BatteryOptimizer {
         const recombination = 0.7; // Recombination rate
         const maxiter = Math.min(50, Math.max(25, T * 1.5)); // Reduced max generations
         
-        // Bias initial population: charge at low prices, discharge at high prices
+        // Bias initial population using Viterbi path guidance
+        const viterbiLowIndices = [];
+        const viterbiHighIndices = [];
+        
+        if (viterbiPath && viterbiPath.length > 0) {
+            // Use Viterbi path to identify low and high price periods
+            for (let t = 0; t < T; t++) {
+                if (viterbiPath[t] === 1) { // Predicted low price
+                    viterbiLowIndices.push(t);
+                } else if (viterbiPath[t] === 3) { // Predicted high price
+                    viterbiHighIndices.push(t);
+                }
+            }
+        }
+        
+        // Fallback to price-based sorting if Viterbi path is not available
         const sortedIndices = prices.map((p, i) => [p, i]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
-        const lowIndices = sortedIndices.slice(0, Math.floor(T / 3));
-        const highIndices = sortedIndices.slice(-Math.floor(T / 3));
+        const lowIndices = viterbiLowIndices.length > 0 ? viterbiLowIndices : sortedIndices.slice(0, Math.floor(T / 3));
+        const highIndices = viterbiHighIndices.length > 0 ? viterbiHighIndices : sortedIndices.slice(-Math.floor(T / 3));
 
         // Initialize population
         const population = [];
