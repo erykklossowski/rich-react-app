@@ -14,8 +14,8 @@ export const useOptimizationStore = create(
       categorizationOptions: { lowThreshold: -0.5, highThreshold: 0.5 },
 
       // Backtest state
-      startDate: '2020-01-01',
-      endDate: '2020-12-31',
+      startDate: '2024-06-14',
+      endDate: '2025-07-18',
       analysisType: 'monthly',
       backtestParams: { pMax: 10, socMin: 10, socMax: 40, efficiency: 0.85 }, // 1x to 4x Max Power
 

@@ -362,7 +362,7 @@ const AFRRVisualization = () => {
                         <div className="bg-blue-50 p-4 rounded-lg">
                             <div className="text-sm text-blue-600">Average</div>
                             <div className="text-xl font-bold text-blue-900">
-                                {data.contractingValues.reduce((sum, val) => sum + val, 0) / data.contractingValues.length.toFixed(2)} MW
+                                {(data.contractingValues.reduce((sum, val) => sum + val, 0) / data.contractingValues.length).toFixed(2)} MW
                             </div>
                         </div>
                         <div className="bg-green-50 p-4 rounded-lg">

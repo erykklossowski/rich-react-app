@@ -348,7 +348,7 @@ const App = () => {
 
       for (const [index, key] of groupKeys.entries()) {
         const groupData = groups[key]
-        const prices = groupData.map(record => record.price)
+        const prices = groupData.map(record => record.csdac_pln || record.price)
 
         console.log(`Processing period ${key}: ${prices.length} data points`)
         console.log(`Price range: ${Math.min(...prices)} - ${Math.max(...prices)}`)
