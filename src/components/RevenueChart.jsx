@@ -9,12 +9,39 @@ const RevenueChart = ({ results }) => {
   const chartRef = useRef(null);
   const chartInstance = useRef(null);
 
+  // Debug logging to track data flow
+  useEffect(() => {
+    console.log('🔍 RevenueChart Debug:');
+    console.log('  Results received:', results);
+    console.log('  Results length:', results?.length || 0);
+    console.log('  Results type:', typeof results);
+    
+    if (results && results.length > 0) {
+      console.log('  First result:', results[0]);
+      console.log('  Last result:', results[results.length - 1]);
+      
+      // Check for NaN values
+      const nanResults = results.filter(r => 
+        isNaN(r.totalRevenue) || 
+        isNaN(r.totalEnergyDischarged) || 
+        isNaN(r.dataPoints)
+      );
+      
+      if (nanResults.length > 0) {
+        console.log('  ❌ NaN VALUES DETECTED:', nanResults);
+      } else {
+        console.log('  ✅ No NaN values found');
+      }
+    }
+  }, [results]);
+
   useEffect(() => {
     if (chartInstance.current) {
       chartInstance.current.destroy();
     }
 
     if (!results || results.length === 0) {
+      console.log('  ⚠️  No results provided to RevenueChart');
       return;
     }
 
@@ -78,28 +105,62 @@ const RevenueChart = ({ results }) => {
     return period;
   };
 
-  // Calculate chart statistics
-  const totalRevenue = sortedResults.reduce((sum, r) => sum + r.totalRevenue, 0);
-  const avgRevenue = totalRevenue / sortedResults.length;
-  const maxRevenue = Math.max(...sortedResults.map(r => r.totalRevenue));
-  const minRevenue = Math.min(...sortedResults.map(r => r.totalRevenue));
+  // Calculate chart statistics with validation
+  const totalRevenue = sortedResults.reduce((sum, r) => {
+    if (isNaN(r.totalRevenue)) {
+      console.log('  ❌ NaN detected in totalRevenue calculation for period:', r.period);
+      return sum;
+    }
+    return sum + r.totalRevenue;
+  }, 0);
+  
+  const avgRevenue = sortedResults.length > 0 ? totalRevenue / sortedResults.length : 0;
+  const maxRevenue = sortedResults.length > 0 ? Math.max(...sortedResults.map(r => r.totalRevenue || 0)) : 0;
+  const minRevenue = sortedResults.length > 0 ? Math.min(...sortedResults.map(r => r.totalRevenue || 0)) : 0;
+  
+  // Validate summary calculations
+  if (isNaN(totalRevenue) || isNaN(avgRevenue) || isNaN(maxRevenue) || isNaN(minRevenue)) {
+    console.log('  ❌ NaN detected in summary calculations:');
+    console.log('    totalRevenue:', totalRevenue);
+    console.log('    avgRevenue:', avgRevenue);
+    console.log('    maxRevenue:', maxRevenue);
+    console.log('    minRevenue:', minRevenue);
+  } else {
+    console.log('  ✅ Summary calculations valid');
+  }
 
-  // Prepare chart data
+  // Prepare chart data with validation
+  const chartLabels = sortedResults.map(r => formatPeriod(r.period));
+  const chartValues = sortedResults.map(r => {
+    if (isNaN(r.totalRevenue)) {
+      console.log('  ❌ NaN detected in chart data for period:', r.period);
+      return 0;
+    }
+    return r.totalRevenue;
+  });
+  
   const chartData = {
-    labels: sortedResults.map(r => formatPeriod(r.period)),
+    labels: chartLabels,
     datasets: [{
       label: 'Revenue (PLN)',
-      data: sortedResults.map(r => r.totalRevenue),
-      backgroundColor: sortedResults.map(r => 
-        r.totalRevenue > 0 ? 'rgba(34, 197, 94, 0.8)' : 'rgba(239, 68, 68, 0.8)'
+      data: chartValues,
+      backgroundColor: chartValues.map(value => 
+        value > 0 ? 'rgba(34, 197, 94, 0.8)' : 'rgba(239, 68, 68, 0.8)'
       ),
-      borderColor: sortedResults.map(r => 
-        r.totalRevenue > 0 ? '#22c55e' : '#ef4444'
+      borderColor: chartValues.map(value => 
+        value > 0 ? '#22c55e' : '#ef4444'
       ),
       borderWidth: 2,
       borderRadius: 4,
     }]
   };
+  
+  // Validate chart data
+  if (chartValues.some(v => isNaN(v))) {
+    console.log('  ❌ NaN detected in chart values');
+  } else {
+    console.log('  ✅ Chart data valid');
+  }
 
   const options = {
     responsive: true,
