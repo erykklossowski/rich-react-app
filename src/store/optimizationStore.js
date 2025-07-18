@@ -821,13 +821,13 @@ export const useOptimizationStore = create(
             
             const monthDays = monthData.length / 24
             const expectedDays = new Date(new Date(monthData[0].datetime).getFullYear(), new Date(monthData[0].datetime).getMonth() + 1, 0).getDate()
-            const completeness = monthDays / expectedDays
+            const dayCompleteness = monthDays / expectedDays
             
             debugReport.dataPath.monthlyGroups.monthDetails[monthKey] = {
               records: monthData.length,
               days: monthDays,
               expectedDays: expectedDays,
-              completeness: completeness,
+              completeness: dayCompleteness,
               priceStats: {
                 min: Math.min(...prices),
                 max: Math.max(...prices),
@@ -841,15 +841,21 @@ export const useOptimizationStore = create(
             }
             
             console.log(`\n📊 ${monthKey}:`)
-            console.log(`  Records: ${monthData.length}, Days: ${monthDays.toFixed(1)}/${expectedDays} (${(completeness * 100).toFixed(1)}% complete)`)
+            console.log(`  Records: ${monthData.length}, Days: ${monthDays.toFixed(1)}/${expectedDays} (${(dayCompleteness * 100).toFixed(1)}% complete)`)
             console.log(`  Price range: ${Math.min(...prices).toFixed(2)} - ${Math.max(...prices).toFixed(2)} PLN/MWh`)
             console.log(`  Date range: ${monthData[0]?.datetime} to ${monthData[monthData.length - 1]?.datetime}`)
             console.log(`  Sample timestamps:`, timestamps.slice(0, 3))
             
-            // Check for data compression issues
-            if (monthData.length < 24 * 28) { // Less than 28 days
-              debugReport.issues.push(`${monthKey}: Insufficient data (${monthData.length} records, expected ~${24 * 30})`)
-              console.log(`  ⚠️  INSUFFICIENT DATA DETECTED`)
+            // Check for data compression issues (using 50% threshold like main validation)
+            const expectedMonthlyRecords = 24 * 30 // ~720 records for a full month
+            const completeness = monthData.length / expectedMonthlyRecords
+            const isInsufficient = completeness < 0.5 // 50% threshold
+            
+            if (isInsufficient) {
+              debugReport.issues.push(`${monthKey}: Insufficient data (${monthData.length} records, expected ~${expectedMonthlyRecords}, ${(completeness * 100).toFixed(1)}% complete)`)
+              console.log(`  ⚠️  INSUFFICIENT DATA DETECTED (${(completeness * 100).toFixed(1)}% complete)`)
+            } else {
+              console.log(`  ✅ Data sufficient (${(completeness * 100).toFixed(1)}% complete)`)
             }
             
             // Check for invalid timestamps

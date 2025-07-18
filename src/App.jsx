@@ -365,8 +365,9 @@ const App = () => {
         const actualHours = data.length;
         const completeness = actualHours / expectedHours;
         
-        // Consider data complete if it has at least 90% of expected hours
-        const isValid = completeness >= 0.9;
+        // Consider data valid if it has at least 50% of expected hours (more lenient)
+        // This allows partial months to still be processed
+        const isValid = completeness >= 0.5;
         
         return {
           isValid,
@@ -398,7 +399,7 @@ const App = () => {
           continue;
         }
 
-        if (prices.length >= 24) {
+        if (prices.length >= 12) { // Reduced from 24 to 12 to allow partial months
           console.log(`Attempting optimization for period ${key} with ${prices.length} data points`)
           console.log(`Parameters:`, params)
           
@@ -492,7 +493,7 @@ const App = () => {
             }
           }
         } else {
-          console.warn(`Skipping period ${key} due to insufficient data points (${prices.length} < 24).`)
+          console.warn(`Skipping period ${key} due to insufficient data points (${prices.length} < 12).`)
         }
 
         const totalProgress = 60 + (40 * (index + 1) / groupKeys.length)
