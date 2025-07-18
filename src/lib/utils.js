@@ -6,16 +6,16 @@ export function cn(...inputs) {
 }
 
 export function formatCurrency(amount) {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('pl-PL', {
     style: 'currency',
-    currency: 'EUR',
+    currency: 'PLN',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount)
 }
 
 export function formatNumber(num, decimals = 1) {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('pl-PL', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   }).format(num)
@@ -26,7 +26,7 @@ export function formatPercentage(value) {
 }
 
 export function formatDate(dateString) {
-  return new Date(dateString).toLocaleDateString('en-US', {
+  return new Date(dateString).toLocaleDateString('pl-PL', {
     year: 'numeric',
     month: 'short',
     day: 'numeric'
@@ -34,7 +34,7 @@ export function formatDate(dateString) {
 }
 
 export function formatDateTime(dateString) {
-  return new Date(dateString).toLocaleString('en-US', {
+  return new Date(dateString).toLocaleString('pl-PL', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
