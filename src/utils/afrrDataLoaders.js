@@ -405,9 +405,19 @@ export const loadDayAheadPriceData = async (options = {}) => {
     }
 };
 
-// Aggregate SK data from 15-minute to hourly resolution
+// Aggregates SK data from 15-minute to hourly resolution
 const aggregateSkDataToHourly = (data) => {
-    const hourlyMap = new Map();
+    if (!Array.isArray(data) || data.length === 0) {
+        console.log('No SK data to aggregate');
+        return [];
+    }
+
+    console.log(`Starting SK data aggregation of ${data.length} 15-minute records to hourly`);
+    
+    // Group records by hour
+    const hourlyGroups = {};
+    let processedRecords = 0;
+    let skippedRecords = 0;
     
     data.forEach(record => {
         try {
@@ -416,66 +426,80 @@ const aggregateSkDataToHourly = (data) => {
             // Validate date
             if (isNaN(date.getTime())) {
                 console.warn(`Invalid date in SK data: ${record.dtime}`);
-                return; // Skip this record
+                skippedRecords++;
+                return;
             }
             
-            // Round to the nearest hour
-            const hourKey = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), 0, 0, 0);
+            // Create a key for each hour (YYYY-MM-DD HH)
+            const hourKey = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}`;
             
-            // Validate hourKey
-            if (isNaN(hourKey.getTime())) {
-                console.warn(`Invalid hourKey for date: ${record.dtime}`);
-                return; // Skip this record
+            if (!hourlyGroups[hourKey]) {
+                hourlyGroups[hourKey] = {
+                    sk_d1_fcst_values: [],
+                    sk_d_fcst_values: [],
+                    sk_cost_values: [],
+                    count: 0
+                };
             }
             
-            const hourKeyStr = hourKey.toISOString().slice(0, 19).replace('T', ' ');
-        
-        if (!hourlyMap.has(hourKeyStr)) {
-            hourlyMap.set(hourKeyStr, {
-                dtime: hourKeyStr,
-                dtime_utc: hourKey.toISOString(),
-                business_date: record.business_date,
-                period: date.getHours(),
-                sk_d1_fcst_values: [],
-                sk_d_fcst_values: [],
-                sk_cost_values: [],
-                count: 0
-            });
-        }
-        
-        const hourlyRecord = hourlyMap.get(hourKeyStr);
-        if (record.sk_d1_fcst !== null && !isNaN(record.sk_d1_fcst)) {
-            hourlyRecord.sk_d1_fcst_values.push(record.sk_d1_fcst);
-        }
-        if (record.sk_d_fcst !== null && !isNaN(record.sk_d_fcst)) {
-            hourlyRecord.sk_d_fcst_values.push(record.sk_d_fcst);
-        }
-        if (record.sk_cost !== null && !isNaN(record.sk_cost)) {
-            hourlyRecord.sk_cost_values.push(record.sk_cost);
-        }
-        hourlyRecord.count++;
+            const hourlyGroup = hourlyGroups[hourKey];
+            if (record.sk_d1_fcst !== null && !isNaN(record.sk_d1_fcst)) {
+                hourlyGroup.sk_d1_fcst_values.push(record.sk_d1_fcst);
+            }
+            if (record.sk_d_fcst !== null && !isNaN(record.sk_d_fcst)) {
+                hourlyGroup.sk_d_fcst_values.push(record.sk_d_fcst);
+            }
+            if (record.sk_cost !== null && !isNaN(record.sk_cost)) {
+                hourlyGroup.sk_cost_values.push(record.sk_cost);
+            }
+            hourlyGroup.count++;
+            processedRecords++;
+            
         } catch (error) {
             console.warn(`Error processing SK record: ${record.dtime}`, error.message);
+            skippedRecords++;
         }
     });
     
-    // Calculate average values for each hour
-    const hourlyData = Array.from(hourlyMap.values()).map(record => ({
-        dtime: record.dtime,
-        dtime_utc: record.dtime_utc,
-        business_date: record.business_date,
-        period: record.period,
-        sk_d1_fcst: record.sk_d1_fcst_values.length > 0 ? 
-            record.sk_d1_fcst_values.reduce((sum, v) => sum + v, 0) / record.sk_d1_fcst_values.length : null,
-        sk_d_fcst: record.sk_d_fcst_values.length > 0 ? 
-            record.sk_d_fcst_values.reduce((sum, v) => sum + v, 0) / record.sk_d_fcst_values.length : null,
-        sk_cost: record.sk_cost_values.length > 0 ? 
-            record.sk_cost_values.reduce((sum, v) => sum + v, 0) / record.sk_cost_values.length : null,
-        data_points: record.count
-    }));
+    console.log(`Processed ${processedRecords} SK records, skipped ${skippedRecords} records`);
+    
+    // Calculate hourly averages
+    const hourlyData = [];
+    let completeHours = 0;
+    let incompleteHours = 0;
+    
+    for (const hourKey in hourlyGroups) {
+        const group = hourlyGroups[hourKey];
+        if (group.count >= 3) { // Require at least 3 out of 4 quarters for SK data
+            const avgSkD1Fcst = group.sk_d1_fcst_values.length > 0 ? 
+                group.sk_d1_fcst_values.reduce((sum, v) => sum + v, 0) / group.sk_d1_fcst_values.length : null;
+            const avgSkDFcst = group.sk_d_fcst_values.length > 0 ? 
+                group.sk_d_fcst_values.reduce((sum, v) => sum + v, 0) / group.sk_d_fcst_values.length : null;
+            const avgSkCost = group.sk_cost_values.length > 0 ? 
+                group.sk_cost_values.reduce((sum, v) => sum + v, 0) / group.sk_cost_values.length : null;
+            
+            hourlyData.push({
+                dtime: `${hourKey}:00:00`,
+                dtime_utc: new Date(`${hourKey}:00:00`).toISOString(),
+                business_date: hourKey.split(' ')[0],
+                period: parseInt(hourKey.split(' ')[1]),
+                sk_d1_fcst: avgSkD1Fcst,
+                sk_d_fcst: avgSkDFcst,
+                sk_cost: avgSkCost,
+                data_points: group.count
+            });
+            completeHours++;
+        } else {
+            incompleteHours++;
+            console.warn(`Skipping incomplete hour ${hourKey}: ${group.count}/4 quarters`);
+        }
+    }
     
     // Sort by time
     hourlyData.sort((a, b) => new Date(a.dtime) - new Date(b.dtime));
+    
+    console.log(`SK aggregation complete: ${hourlyData.length} hourly records created`);
+    console.log(`Complete hours: ${completeHours}, Incomplete hours: ${incompleteHours}`);
     
     return hourlyData;
 };

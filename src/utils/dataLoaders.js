@@ -106,11 +106,17 @@ export const loadPolishData = async () => {
     }
 };
 
-// Aggregate 15-minute data to hourly data
+// Aggregates 15-min resolution data into hourly averages
 const aggregateToHourly = (data) => {
+    if (!Array.isArray(data) || data.length === 0) {
+        console.log('No data to aggregate');
+        return [];
+    }
+
     console.log(`Starting aggregation of ${data.length} 15-minute records to hourly`);
     
-    const hourlyMap = new Map();
+    // Group records by hour
+    const hourlyGroups = {};
     let processedRecords = 0;
     let skippedRecords = 0;
     
@@ -131,28 +137,13 @@ const aggregateToHourly = (data) => {
                 return;
             }
             
-            // Round to the nearest hour (truncate minutes and seconds)
-            const hourKey = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), 0, 0, 0);
+            // Create a key for each hour (YYYY-MM-DD HH)
+            const hourKey = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}`;
             
-            // Create consistent hour key string
-            const hourKeyStr = hourKey.toISOString().slice(0, 13) + ':00:00.000Z';
-            
-            if (!hourlyMap.has(hourKeyStr)) {
-                hourlyMap.set(hourKeyStr, {
-                    dtime: hourKey.toISOString().slice(0, 19).replace('T', ' '),
-                    dtime_utc: hourKey.toISOString(),
-                    business_date: record.business_date || hourKey.toISOString().slice(0, 10),
-                    period: date.getHours(),
-                    prices: [],
-                    count: 0,
-                    timestamps: []
-                });
+            if (!hourlyGroups[hourKey]) {
+                hourlyGroups[hourKey] = [];
             }
-            
-            const hourlyRecord = hourlyMap.get(hourKeyStr);
-            hourlyRecord.prices.push(record.csdac_pln);
-            hourlyRecord.timestamps.push(record.dtime);
-            hourlyRecord.count++;
+            hourlyGroups[hourKey].push(record.csdac_pln);
             processedRecords++;
             
         } catch (error) {
@@ -163,40 +154,47 @@ const aggregateToHourly = (data) => {
     
     console.log(`Processed ${processedRecords} records, skipped ${skippedRecords} records`);
     
-    // Calculate average price for each hour
-    const hourlyData = Array.from(hourlyMap.values()).map(record => {
-        const avgPrice = record.prices.reduce((sum, price) => sum + price, 0) / record.prices.length;
-        
-        return {
-            dtime: record.dtime,
-            dtime_utc: record.dtime_utc,
-            business_date: record.business_date,
-            period: record.period,
-            csdac_pln: avgPrice,
-            price_count: record.count,
-            original_timestamps: record.timestamps
-        };
-    });
+    // Calculate hourly averages
+    const hourlyData = [];
+    let completeHours = 0;
+    let incompleteHours = 0;
+    
+    for (const hourKey in hourlyGroups) {
+        const prices = hourlyGroups[hourKey];
+        if (prices.length === 4) { // Only aggregate if we have all 4 quarters
+            const avgPrice = prices.reduce((a, b) => a + b, 0) / 4;
+            hourlyData.push({
+                dtime: `${hourKey}:00:00`,
+                dtime_utc: new Date(`${hourKey}:00:00`).toISOString(),
+                business_date: hourKey.split(' ')[0],
+                period: parseInt(hourKey.split(' ')[1]),
+                csdac_pln: avgPrice,
+                price_count: 4,
+                original_timestamps: [] // Could store original timestamps if needed
+            });
+            completeHours++;
+        } else {
+            incompleteHours++;
+            console.warn(`Skipping incomplete hour ${hourKey}: ${prices.length}/4 quarters`);
+        }
+    }
     
     // Sort by time
     hourlyData.sort((a, b) => new Date(a.dtime) - new Date(b.dtime));
     
     console.log(`Aggregation complete: ${hourlyData.length} hourly records created`);
-    console.log(`Date range: ${hourlyData[0]?.dtime} to ${hourlyData[hourlyData.length-1]?.dtime}`);
-    
-    // Validate aggregation quality
-    const expectedRecordsPerDay = 24;
-    const totalDays = hourlyData.length / expectedRecordsPerDay;
-    console.log(`Expected days: ${totalDays.toFixed(1)}, Actual records: ${hourlyData.length}`);
+    console.log(`Complete hours: ${completeHours}, Incomplete hours: ${incompleteHours}`);
     
     if (hourlyData.length > 0) {
+        console.log(`Date range: ${hourlyData[0]?.dtime} to ${hourlyData[hourlyData.length-1]?.dtime}`);
+        
+        // Validation: Check for expected 24 records per day
         const firstDate = new Date(hourlyData[0].dtime);
         const lastDate = new Date(hourlyData[hourlyData.length-1].dtime);
-        const actualDays = (lastDate - firstDate) / (1000 * 60 * 60 * 24);
-        console.log(`Actual date span: ${actualDays.toFixed(1)} days`);
-        
+        const actualDays = (lastDate - firstDate) / (1000 * 60 * 60 * 24) + 1; // +1 for inclusive
         const recordsPerDay = hourlyData.length / actualDays;
-        console.log(`Records per day: ${recordsPerDay.toFixed(1)} (expected: ${expectedRecordsPerDay})`);
+        
+        console.log(`Actual days: ${actualDays.toFixed(1)}, Records per day: ${recordsPerDay.toFixed(1)} (expected: 24)`);
         
         if (recordsPerDay < 20 || recordsPerDay > 28) {
             console.warn(`⚠️  Unusual aggregation ratio: ${recordsPerDay.toFixed(1)} records/day`);
