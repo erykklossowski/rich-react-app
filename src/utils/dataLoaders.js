@@ -1,11 +1,7 @@
 // Path: src/utils/dataLoaders.js
 
-// Configuration for the data sources from GitHub repository
-const DATA_BASE_URL = 'https://raw.githubusercontent.com/erykklossowski/resslv/main';
-const CSDAC_PLN_URL = `${DATA_BASE_URL}/csdac_pln_data.json`;
-const MBP_TP_URL = `${DATA_BASE_URL}/mbp_tp_data.json`;
-const CMBP_TP_URL = `${DATA_BASE_URL}/cmbp_tp_data.json`;
-const SK_DATA_URL = `${DATA_BASE_URL}/sk_data.json`;
+// Import dynamic configuration
+import { CSDAC_PLN_URL, MBP_TP_URL, CMBP_TP_URL, SK_DATA_URL, getDataConfig } from './dataConfig.js';
 
 // Generic data fetcher with error handling
 const fetchDataFromGitHub = async (url, dataType) => {

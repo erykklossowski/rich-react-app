@@ -1,6 +1,7 @@
 // Path: src/utils/afrrDataLoaders.js
 
 import { loadAllPSEData, loadAFRRData, loadMarketData, filterDataByDateRange, getDataStatistics } from './dataLoaders.js';
+import { getDataConfig } from './dataConfig.js';
 
 // Configuration for aFRR analysis
 const AFRR_CONFIG = {
@@ -70,8 +71,9 @@ export const loadAFRRDataForAnalysis = async (options = {}) => {
             filteredData = filterDataByDateRange(afrrData, startDate, endDate);
             console.log(`Filtered to ${filteredData.length} records in date range`);
         } else if (lookbackDays) {
-            // Use lookback period from historical data end date
-            const historicalEndDate = new Date('2025-02-28');
+            // Use lookback period from dynamic data end date
+            const config = await getDataConfig();
+            const historicalEndDate = new Date(config.dataEndDate);
             const startDate = new Date(historicalEndDate);
             startDate.setDate(startDate.getDate() - lookbackDays);
             filteredData = filterDataByDateRange(afrrData, startDate.toISOString().split('T')[0], historicalEndDate.toISOString().split('T')[0]);
@@ -135,8 +137,9 @@ export const loadComprehensiveMarketData = async (options = {}) => {
             filteredData = filterDataByDateRange(marketData, startDate, endDate);
             console.log(`Filtered to ${filteredData.length} records in date range`);
         } else if (lookbackDays) {
-            // Use lookback period from historical data end date
-            const historicalEndDate = new Date('2025-02-28');
+            // Use lookback period from dynamic data end date
+            const config = await getDataConfig();
+            const historicalEndDate = new Date(config.dataEndDate);
             const startDate = new Date(historicalEndDate);
             startDate.setDate(startDate.getDate() - lookbackDays);
             filteredData = filterDataByDateRange(marketData, startDate.toISOString().split('T')[0], historicalEndDate.toISOString().split('T')[0]);
@@ -249,8 +252,9 @@ export const loadSystemContractingData = async (options = {}) => {
             filteredData = filterDataByDateRange(hourlySkData, startDate, endDate);
             console.log(`Filtered to ${filteredData.length} records in date range`);
         } else if (lookbackDays) {
-            // Use lookback period from historical data end date
-            const historicalEndDate = new Date('2025-02-28');
+            // Use lookback period from dynamic data end date
+            const config = await getDataConfig();
+            const historicalEndDate = new Date(config.dataEndDate);
             const startDate = new Date(historicalEndDate);
             startDate.setDate(startDate.getDate() - lookbackDays);
             filteredData = filterDataByDateRange(hourlySkData, startDate.toISOString().split('T')[0], historicalEndDate.toISOString().split('T')[0]);
@@ -328,8 +332,9 @@ export const loadDayAheadPriceData = async (options = {}) => {
             filteredData = filterDataByDateRange(csdacData, startDate, endDate);
             console.log(`Filtered to ${filteredData.length} records in date range`);
         } else if (lookbackDays) {
-            // Use lookback period from historical data end date
-            const historicalEndDate = new Date('2025-02-28');
+            // Use lookback period from dynamic data end date
+            const config = await getDataConfig();
+            const historicalEndDate = new Date(config.dataEndDate);
             const startDate = new Date(historicalEndDate);
             startDate.setDate(startDate.getDate() - lookbackDays);
             filteredData = filterDataByDateRange(csdacData, startDate.toISOString().split('T')[0], historicalEndDate.toISOString().split('T')[0]);

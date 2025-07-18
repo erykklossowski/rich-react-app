@@ -6,6 +6,7 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Slider } from './ui/slider'
 import { useOptimizationStore } from '../store/optimizationStore'
+import { getDataConfig } from '../utils/dataConfig.js'
 import { 
   Calendar, 
   Zap, 
@@ -18,8 +19,11 @@ import {
   BarChart3
 } from 'lucide-react'
 import { formatNumber } from '../lib/utils'
+import { useState, useEffect } from 'react'
 
 const BacktestForm = ({ onRunBacktest, onLoadPresets, onTestConnection }) => {
+  const [dataConfig, setDataConfig] = useState(null)
+  
   const {
     startDate,
     endDate,
@@ -37,6 +41,19 @@ const BacktestForm = ({ onRunBacktest, onLoadPresets, onTestConnection }) => {
     progress,
     progressText
   } = useOptimizationStore()
+
+  // Load dynamic data configuration
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const config = await getDataConfig()
+        setDataConfig(config)
+      } catch (error) {
+        console.error('Failed to load data configuration:', error)
+      }
+    }
+    loadConfig()
+  }, [])
 
   const handleSliderChange = (value, param) => {
     updateBacktestParams({ [param]: value[0] })
@@ -71,11 +88,17 @@ const BacktestForm = ({ onRunBacktest, onLoadPresets, onTestConnection }) => {
               <span className="text-xs font-bold">Polish Electricity Market</span>
             </div>
             <div className="text-xs text-[#555555] space-y-1">
-              <div><strong>Period:</strong> 2024-06-14 to 2025-07-18</div>
-              <div><strong>Records:</strong> 38,400 (15-min resolution)</div>
-              <div><strong>Price Range:</strong> -567.92 to 2,748.07 PLN/MWh</div>
-              <div><strong>Average:</strong> 445.40 PLN/MWh</div>
-              <div><strong>Data Source:</strong> PSE CSDAC PLN</div>
+              {dataConfig ? (
+                <>
+                  <div><strong>Period:</strong> {dataConfig.dataStartDate} to {dataConfig.dataEndDate}</div>
+                  <div><strong>Records:</strong> {dataConfig.totalRecords.toLocaleString()} (15-min resolution)</div>
+                  <div><strong>Price Range:</strong> {dataConfig.priceRange.min.toFixed(2)} to {dataConfig.priceRange.max.toFixed(2)} {dataConfig.currency}/MWh</div>
+                  <div><strong>Average:</strong> {dataConfig.priceRange.avg.toFixed(2)} {dataConfig.currency}/MWh</div>
+                  <div><strong>Data Source:</strong> PSE CSDAC PLN</div>
+                </>
+              ) : (
+                <div>Loading data configuration...</div>
+              )}
             </div>
           </div>
         </div>
@@ -96,18 +119,18 @@ const BacktestForm = ({ onRunBacktest, onLoadPresets, onTestConnection }) => {
               <div className="grid grid-cols-2 gap-2">
                 <input
                   type="date"
-                  value={startDate}
+                  value={startDate || ''}
                   onChange={(e) => setStartDate(e.target.value)}
-                  min="2024-06-14"
-                  max="2025-07-18"
+                  min={dataConfig?.dataStartDate || "2024-06-14"}
+                  max={dataConfig?.dataEndDate || "2025-07-18"}
                   className="amiga-input text-xs"
                 />
                 <input
                   type="date"
-                  value={endDate}
+                  value={endDate || ''}
                   onChange={(e) => setEndDate(e.target.value)}
-                  min="2024-06-14"
-                  max="2025-07-18"
+                  min={dataConfig?.dataStartDate || "2024-06-14"}
+                  max={dataConfig?.dataEndDate || "2025-07-18"}
                   className="amiga-input text-xs"
                 />
               </div>

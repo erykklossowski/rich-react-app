@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
+import { getDataConfig, getDateRange, getPresetScenarios } from '../utils/dataConfig.js'
 
 export const useOptimizationStore = create(
   devtools(
@@ -13,9 +14,9 @@ export const useOptimizationStore = create(
       categorizationMethod: 'zscore', // Default to best performing method
       categorizationOptions: { lowThreshold: -0.5, highThreshold: 0.5 },
 
-      // Backtest state - Use historical date range for proper backtesting
-      startDate: '2024-11-01',
-      endDate: '2025-02-28',
+      // Backtest state - Will be initialized with dynamic data range
+      startDate: null,
+      endDate: null,
       analysisType: 'monthly',
       backtestParams: { pMax: 10, socMin: 10, socMax: 40, efficiency: 0.85 }, // 1x to 4x Max Power
 
@@ -80,6 +81,43 @@ export const useOptimizationStore = create(
 
       setPolishData: (data) => set({ polishData: data }),
 
+      // Initialize store with dynamic configuration
+      initializeWithDataConfig: async () => {
+        try {
+          const config = await getDataConfig();
+          const dateRange = await getDateRange();
+          
+          set({
+            startDate: dateRange.startDate,
+            endDate: dateRange.endDate
+          });
+          
+          console.log('Store initialized with dynamic configuration:', { dateRange, config });
+        } catch (error) {
+          console.error('Failed to initialize store with dynamic configuration:', error);
+          // Fallback to default values
+          set({
+            startDate: '2024-06-14',
+            endDate: '2025-07-18'
+          });
+        }
+      },
+
+      // Get dynamic preset scenarios
+      getDynamicPresets: async () => {
+        try {
+          return await getPresetScenarios();
+        } catch (error) {
+          console.error('Failed to get dynamic presets:', error);
+          // Fallback to default presets
+          return [
+            { name: 'Last 7 Days', start: '2025-07-11', end: '2025-07-18', type: 'continuous' },
+            { name: 'Last 30 Days', start: '2025-06-18', end: '2025-07-18', type: 'continuous' },
+            { name: 'Current Month', start: '2025-07-01', end: '2025-07-18', type: 'continuous' }
+          ];
+        }
+      },
+
       // Complex actions
       resetResults: () => set({
         optimizationResult: null,
@@ -122,99 +160,411 @@ export const useOptimizationStore = create(
         return state.backtestParams
       },
 
-      // Debug function to generate diagnostic information
+      // Comprehensive debug function to generate thorough diagnostic information
       generateDebugInfo: async () => {
         const state = get()
         
         try {
-          // Load and analyze data
-          const { loadCSDACPLNData, loadPolishData, loadSystemContractingData } = await import('../utils/dataLoaders.js')
-          const { loadSystemContractingData: loadAFRRSystemData } = await import('../utils/afrrDataLoaders.js')
+          console.log('=== COMPREHENSIVE DATA DIAGNOSTIC REPORT ===')
+          console.log(`Generated at: ${new Date().toISOString()}`)
           
-          console.log('=== DEBUG: Data Analysis ===')
+          // Import all necessary modules
+          const { loadCSDACPLNData, loadPolishData, loadAllPSEData, filterDataByDateRange } = await import('../utils/dataLoaders.js')
+          const { loadSystemContractingData: loadAFRRSystemData, loadAFRRDataForAnalysis } = await import('../utils/afrrDataLoaders.js')
+          const { getDataConfig } = await import('../utils/dataConfig.js')
           
-          // 1. Raw CSDAC data
-          console.log('\n1. Raw CSDAC PLN Data:')
-          const rawCsdac = await loadCSDACPLNData()
-          console.log(`- Total records: ${rawCsdac.length}`)
-          console.log(`- Date range: ${rawCsdac[0]?.dtime} to ${rawCsdac[rawCsdac.length-1]?.dtime}`)
-          console.log(`- Sample records:`, rawCsdac.slice(0, 3))
+          const debugReport = {
+            timestamp: new Date().toISOString(),
+            summary: {},
+            dataSources: {},
+            dataValidation: {},
+            parsingIssues: [],
+            integrationTests: {},
+            recommendations: []
+          }
           
-          // 2. Aggregated Polish data
-          console.log('\n2. Aggregated Polish Data:')
-          const polishData = await loadPolishData()
-          console.log(`- Total records: ${polishData.length}`)
-          console.log(`- Date range: ${polishData[0]?.datetime} to ${polishData[polishData.length-1]?.datetime}`)
-          console.log(`- Price range: ${Math.min(...polishData.map(r => r.price))} to ${Math.max(...polishData.map(r => r.price))}`)
-          console.log(`- Sample records:`, polishData.slice(0, 3))
+          // 1. DYNAMIC CONFIGURATION ANALYSIS
+          console.log('\n1. DYNAMIC CONFIGURATION ANALYSIS')
+          console.log('='.repeat(50))
           
-          // 3. System contracting data
-          console.log('\n3. System Contracting Data:')
-          const contractingData = await loadAFRRSystemData({ lookbackDays: 7 })
-          console.log(`- Total records: ${contractingData.data.length}`)
-          console.log(`- Date range: ${contractingData.data[0]?.dtime} to ${contractingData.data[contractingData.data.length-1]?.dtime}`)
-          console.log(`- Contracting range: ${Math.min(...contractingData.data.map(r => r.sk_d1_fcst))} to ${Math.max(...contractingData.data.map(r => r.sk_d1_fcst))}`)
-          console.log(`- Sample records:`, contractingData.data.slice(0, 3))
+          try {
+            const config = await getDataConfig()
+            debugReport.dynamicConfig = config
+            console.log('✅ Dynamic configuration loaded successfully')
+            console.log(`- Data start date: ${config.dataStartDate}`)
+            console.log(`- Data end date: ${config.dataEndDate}`)
+            console.log(`- Total records: ${config.totalRecords.toLocaleString()}`)
+            console.log(`- Price range: ${config.priceRange.min.toFixed(2)} to ${config.priceRange.max.toFixed(2)} ${config.currency}/MWh`)
+            console.log(`- Average price: ${config.priceRange.avg.toFixed(2)} ${config.currency}/MWh`)
+          } catch (error) {
+            console.log('❌ Dynamic configuration failed:', error.message)
+            debugReport.parsingIssues.push(`Dynamic configuration error: ${error.message}`)
+          }
           
-          // 4. Current store state
-          console.log('\n4. Current Store State:')
+          // 2. RAW DATA SOURCE ANALYSIS
+          console.log('\n2. RAW DATA SOURCE ANALYSIS')
+          console.log('='.repeat(50))
+          
+          // 2.1 CSDAC PLN Data (Day-ahead prices)
+          console.log('\n2.1 CSDAC PLN Data (Day-ahead prices)')
+          try {
+            const rawCsdac = await loadCSDACPLNData()
+            debugReport.dataSources.csdac = {
+              totalRecords: rawCsdac.length,
+              dateRange: {
+                start: rawCsdac[0]?.dtime,
+                end: rawCsdac[rawCsdac.length-1]?.dtime
+              },
+              priceStats: {
+                min: Math.min(...rawCsdac.map(r => r.csdac_pln).filter(p => !isNaN(p))),
+                max: Math.max(...rawCsdac.map(r => r.csdac_pln).filter(p => !isNaN(p))),
+                avg: rawCsdac.map(r => r.csdac_pln).filter(p => !isNaN(p)).reduce((sum, p) => sum + p, 0) / rawCsdac.length
+              },
+              sampleRecords: rawCsdac.slice(0, 3)
+            }
+            
+            console.log(`✅ CSDAC PLN: ${rawCsdac.length.toLocaleString()} records`)
+            console.log(`- Date range: ${rawCsdac[0]?.dtime} to ${rawCsdac[rawCsdac.length-1]?.dtime}`)
+            console.log(`- Price range: ${debugReport.dataSources.csdac.priceStats.min.toFixed(2)} to ${debugReport.dataSources.csdac.priceStats.max.toFixed(2)} PLN/MWh`)
+            console.log(`- Average price: ${debugReport.dataSources.csdac.priceStats.avg.toFixed(2)} PLN/MWh`)
+            
+            // Check for data quality issues
+            const invalidPrices = rawCsdac.filter(r => r.csdac_pln === null || isNaN(r.csdac_pln))
+            if (invalidPrices.length > 0) {
+              console.log(`⚠️  Found ${invalidPrices.length} records with invalid prices`)
+              debugReport.parsingIssues.push(`CSDAC: ${invalidPrices.length} invalid price records`)
+            }
+            
+            const invalidDates = rawCsdac.filter(r => !r.dtime || isNaN(new Date(r.dtime).getTime()))
+            if (invalidDates.length > 0) {
+              console.log(`⚠️  Found ${invalidDates.length} records with invalid dates`)
+              debugReport.parsingIssues.push(`CSDAC: ${invalidDates.length} invalid date records`)
+            }
+            
+          } catch (error) {
+            console.log(`❌ CSDAC PLN loading failed: ${error.message}`)
+            debugReport.parsingIssues.push(`CSDAC loading error: ${error.message}`)
+          }
+          
+          // 2.2 All PSE Data Sources
+          console.log('\n2.2 All PSE Data Sources')
+          try {
+            const allPseData = await loadAllPSEData()
+            debugReport.dataSources.allPSE = {
+              csdacRecords: allPseData.csdac_data?.length || 0,
+              mbpRecords: allPseData.mbp_data?.length || 0,
+              cmbpRecords: allPseData.cmbp_data?.length || 0,
+              skRecords: allPseData.sk_data?.length || 0
+            }
+            
+            console.log(`✅ All PSE data loaded successfully`)
+            console.log(`- CSDAC (prices): ${debugReport.dataSources.allPSE.csdacRecords.toLocaleString()} records`)
+            console.log(`- MBP (volumes): ${debugReport.dataSources.allPSE.mbpRecords.toLocaleString()} records`)
+            console.log(`- CMBP (prices): ${debugReport.dataSources.allPSE.cmbpRecords.toLocaleString()} records`)
+            console.log(`- SK (contracting): ${debugReport.dataSources.allPSE.skRecords.toLocaleString()} records`)
+            
+          } catch (error) {
+            console.log(`❌ All PSE data loading failed: ${error.message}`)
+            debugReport.parsingIssues.push(`All PSE data loading error: ${error.message}`)
+          }
+          
+          // 3. DATA AGGREGATION AND PROCESSING ANALYSIS
+          console.log('\n3. DATA AGGREGATION AND PROCESSING ANALYSIS')
+          console.log('='.repeat(50))
+          
+          // 3.1 Aggregated Polish Data
+          console.log('\n3.1 Aggregated Polish Data (15-min to hourly)')
+          try {
+            const polishData = await loadPolishData()
+            debugReport.dataSources.aggregatedPolish = {
+              totalRecords: polishData.length,
+              dateRange: {
+                start: polishData[0]?.datetime,
+                end: polishData[polishData.length-1]?.datetime
+              },
+              priceStats: {
+                min: Math.min(...polishData.map(r => r.price).filter(p => !isNaN(p))),
+                max: Math.max(...polishData.map(r => r.price).filter(p => !isNaN(p))),
+                avg: polishData.map(r => r.price).filter(p => !isNaN(p)).reduce((sum, p) => sum + p, 0) / polishData.length
+              },
+              sampleRecords: polishData.slice(0, 3)
+            }
+            
+            console.log(`✅ Aggregated Polish: ${polishData.length.toLocaleString()} records`)
+            console.log(`- Date range: ${polishData[0]?.datetime} to ${polishData[polishData.length-1]?.datetime}`)
+            console.log(`- Price range: ${debugReport.dataSources.aggregatedPolish.priceStats.min.toFixed(2)} to ${debugReport.dataSources.aggregatedPolish.priceStats.max.toFixed(2)} PLN/MWh`)
+            console.log(`- Average price: ${debugReport.dataSources.aggregatedPolish.priceStats.avg.toFixed(2)} PLN/MWh`)
+            
+            // Check aggregation quality
+            const expectedRecords = Math.ceil(rawCsdac.length / 4) // 15-min to hourly
+            const aggregationRatio = polishData.length / expectedRecords
+            console.log(`- Aggregation ratio: ${aggregationRatio.toFixed(2)} (expected ~0.25)`)
+            
+            if (aggregationRatio < 0.2 || aggregationRatio > 0.3) {
+              console.log(`⚠️  Unusual aggregation ratio - possible data loss or duplication`)
+              debugReport.parsingIssues.push(`Unusual aggregation ratio: ${aggregationRatio.toFixed(2)}`)
+            }
+            
+          } catch (error) {
+            console.log(`❌ Aggregated Polish data loading failed: ${error.message}`)
+            debugReport.parsingIssues.push(`Aggregated Polish loading error: ${error.message}`)
+          }
+          
+          // 4. aFRR DATA ANALYSIS
+          console.log('\n4. aFRR DATA ANALYSIS')
+          console.log('='.repeat(50))
+          
+          // 4.1 System Contracting Data
+          console.log('\n4.1 System Contracting Data (SK)')
+          try {
+            const contractingData = await loadAFRRSystemData({ lookbackDays: 7 })
+            debugReport.dataSources.contracting = {
+              totalRecords: contractingData.data.length,
+              dateRange: {
+                start: contractingData.data[0]?.dtime,
+                end: contractingData.data[contractingData.data.length-1]?.dtime
+              },
+              contractingStats: {
+                min: Math.min(...contractingData.data.map(r => r.sk_d1_fcst).filter(v => !isNaN(v))),
+                max: Math.max(...contractingData.data.map(r => r.sk_d1_fcst).filter(v => !isNaN(v))),
+                avg: contractingData.data.map(r => r.sk_d1_fcst).filter(v => !isNaN(v)).reduce((sum, v) => sum + v, 0) / contractingData.data.length
+              },
+              sampleRecords: contractingData.data.slice(0, 3)
+            }
+            
+            console.log(`✅ System Contracting: ${contractingData.data.length.toLocaleString()} records`)
+            console.log(`- Date range: ${contractingData.data[0]?.dtime} to ${contractingData.data[contractingData.data.length-1]?.dtime}`)
+            console.log(`- Contracting range: ${debugReport.dataSources.contracting.contractingStats.min.toFixed(2)} to ${debugReport.dataSources.contracting.contractingStats.max.toFixed(2)} MW`)
+            console.log(`- Average contracting: ${debugReport.dataSources.contracting.contractingStats.avg.toFixed(2)} MW`)
+            
+            // Check for sufficient data
+            if (contractingData.data.length < 100) {
+              console.log(`⚠️  Insufficient contracting data: ${contractingData.data.length} records (minimum: 100)`)
+              debugReport.parsingIssues.push(`Insufficient contracting data: ${contractingData.data.length} records`)
+            }
+            
+          } catch (error) {
+            console.log(`❌ System contracting data loading failed: ${error.message}`)
+            debugReport.parsingIssues.push(`System contracting loading error: ${error.message}`)
+          }
+          
+          // 4.2 aFRR Analysis Data
+          console.log('\n4.2 aFRR Analysis Data')
+          try {
+            const afrrData = await loadAFRRDataForAnalysis({ lookbackDays: 7 })
+            debugReport.dataSources.afrr = {
+              totalRecords: afrrData.data.length,
+              dataAvailability: afrrData.dataAvailability || {},
+              sampleRecords: afrrData.data.slice(0, 3)
+            }
+            
+            console.log(`✅ aFRR Analysis: ${afrrData.data.length.toLocaleString()} records`)
+            if (afrrData.dataAvailability) {
+              console.log(`- With aFRR data: ${afrrData.dataAvailability.withAFRR} records`)
+              console.log(`- With SK data: ${afrrData.dataAvailability.withSK} records`)
+              console.log(`- aFRR coverage: ${(afrrData.dataAvailability.afrrCoverage * 100).toFixed(1)}%`)
+              console.log(`- SK coverage: ${(afrrData.dataAvailability.skCoverage * 100).toFixed(1)}%`)
+            }
+            
+          } catch (error) {
+            console.log(`❌ aFRR analysis data loading failed: ${error.message}`)
+            debugReport.parsingIssues.push(`aFRR analysis loading error: ${error.message}`)
+          }
+          
+          // 5. DATE FILTERING AND VALIDATION
+          console.log('\n5. DATE FILTERING AND VALIDATION')
+          console.log('='.repeat(50))
+          
+          const startDate = new Date(state.startDate)
+          const endDate = new Date(state.endDate)
+          
+          debugReport.dateValidation = {
+            startDate: state.startDate,
+            endDate: state.endDate,
+            startDateValid: !isNaN(startDate.getTime()),
+            endDateValid: !isNaN(endDate.getTime()),
+            rangeValid: startDate < endDate,
+            dateRange: {
+              start: startDate.toISOString(),
+              end: endDate.toISOString()
+            }
+          }
+          
+          console.log(`✅ Date validation results:`)
+          console.log(`- Start date: ${state.startDate} (valid: ${!isNaN(startDate.getTime())})`)
+          console.log(`- End date: ${state.endDate} (valid: ${!isNaN(endDate.getTime())})`)
+          console.log(`- Range valid: ${startDate < endDate}`)
+          
+          if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime()) && startDate < endDate) {
+            // Test date filtering
+            try {
+              const filteredData = filterDataByDateRange(polishData, state.startDate, state.endDate)
+              debugReport.dateValidation.filteredRecords = filteredData.length
+              console.log(`- Filtered records: ${filteredData.length.toLocaleString()}`)
+              
+              if (filteredData.length === 0) {
+                console.log(`⚠️  No data found for selected date range`)
+                debugReport.parsingIssues.push(`No data found for date range ${state.startDate} to ${state.endDate}`)
+              }
+            } catch (error) {
+              console.log(`❌ Date filtering failed: ${error.message}`)
+              debugReport.parsingIssues.push(`Date filtering error: ${error.message}`)
+            }
+          }
+          
+          // 6. STORE STATE ANALYSIS
+          console.log('\n6. STORE STATE ANALYSIS')
+          console.log('='.repeat(50))
+          
+          debugReport.storeState = {
+            startDate: state.startDate,
+            endDate: state.endDate,
+            analysisType: state.analysisType,
+            polishDataLoaded: state.polishData ? state.polishData.length : 0,
+            backtestParams: state.backtestParams,
+            categorizationMethod: state.categorizationMethod,
+            categorizationOptions: state.categorizationOptions
+          }
+          
+          console.log(`✅ Store state analysis:`)
           console.log(`- Start date: ${state.startDate}`)
           console.log(`- End date: ${state.endDate}`)
           console.log(`- Analysis type: ${state.analysisType}`)
           console.log(`- Polish data loaded: ${state.polishData ? state.polishData.length : 0} records`)
+          console.log(`- Backtest params:`, state.backtestParams)
+          console.log(`- Categorization method: ${state.categorizationMethod}`)
           
-          // 5. Date validation
-          console.log('\n5. Date Validation:')
-          const startDate = new Date(state.startDate)
-          const endDate = new Date(state.endDate)
-          console.log(`- Start date valid: ${!isNaN(startDate.getTime())}`)
-          console.log(`- End date valid: ${!isNaN(endDate.getTime())}`)
-          console.log(`- Date range valid: ${startDate < endDate}`)
+          // 7. DATA CONSISTENCY CHECKS
+          console.log('\n7. DATA CONSISTENCY CHECKS')
+          console.log('='.repeat(50))
           
-          // Generate debug report
-          const debugReport = {
-            timestamp: new Date().toISOString(),
-            rawCsdacRecords: rawCsdac.length,
-            rawCsdacDateRange: {
-              start: rawCsdac[0]?.dtime,
-              end: rawCsdac[rawCsdac.length-1]?.dtime
-            },
-            aggregatedPolishRecords: polishData.length,
-            aggregatedPolishDateRange: {
-              start: polishData[0]?.datetime,
-              end: polishData[polishData.length-1]?.datetime
-            },
-            contractingRecords: contractingData.data.length,
-            contractingDateRange: {
-              start: contractingData.data[0]?.dtime,
-              end: contractingData.data[contractingData.data.length-1]?.dtime
-            },
-            storeState: {
-              startDate: state.startDate,
-              endDate: state.endDate,
-              analysisType: state.analysisType,
-              polishDataLoaded: state.polishData ? state.polishData.length : 0
-            },
-            dateValidation: {
-              startDateValid: !isNaN(startDate.getTime()),
-              endDateValid: !isNaN(endDate.getTime()),
-              rangeValid: startDate < endDate
-            },
-            sampleData: {
-              rawCsdac: rawCsdac.slice(0, 3),
-              aggregatedPolish: polishData.slice(0, 3),
-              contracting: contractingData.data.slice(0, 3)
+          debugReport.dataConsistency = {}
+          
+          // Check if all data sources have overlapping date ranges
+          const allDateRanges = []
+          if (debugReport.dataSources.csdac) allDateRanges.push({ source: 'CSDAC', start: debugReport.dataSources.csdac.dateRange.start, end: debugReport.dataSources.csdac.dateRange.end })
+          if (debugReport.dataSources.aggregatedPolish) allDateRanges.push({ source: 'Polish', start: debugReport.dataSources.aggregatedPolish.dateRange.start, end: debugReport.dataSources.aggregatedPolish.dateRange.end })
+          if (debugReport.dataSources.contracting) allDateRanges.push({ source: 'Contracting', start: debugReport.dataSources.contracting.dateRange.start, end: debugReport.dataSources.contracting.dateRange.end })
+          
+          console.log(`✅ Data consistency analysis:`)
+          console.log(`- Date ranges found: ${allDateRanges.length}`)
+          
+          if (allDateRanges.length > 1) {
+            const earliestStart = new Date(Math.min(...allDateRanges.map(r => new Date(r.start))))
+            const latestEnd = new Date(Math.max(...allDateRanges.map(r => new Date(r.end))))
+            
+            debugReport.dataConsistency.globalDateRange = {
+              earliestStart: earliestStart.toISOString(),
+              latestEnd: latestEnd.toISOString()
+            }
+            
+            console.log(`- Global date range: ${earliestStart.toISOString().split('T')[0]} to ${latestEnd.toISOString().split('T')[0]}`)
+            
+            // Check for gaps
+            const gaps = []
+            for (let i = 0; i < allDateRanges.length - 1; i++) {
+              const currentEnd = new Date(allDateRanges[i].end)
+              const nextStart = new Date(allDateRanges[i + 1].start)
+              if (nextStart > currentEnd) {
+                gaps.push(`${allDateRanges[i].source} to ${allDateRanges[i + 1].source}`)
+              }
+            }
+            
+            if (gaps.length > 0) {
+              console.log(`⚠️  Found data gaps: ${gaps.join(', ')}`)
+              debugReport.parsingIssues.push(`Data gaps found: ${gaps.join(', ')}`)
+            } else {
+              console.log(`✅ No data gaps detected`)
             }
           }
           
-          console.log('\n=== DEBUG REPORT ===')
+          // 8. INTEGRATION TESTS
+          console.log('\n8. INTEGRATION TESTS')
+          console.log('='.repeat(50))
+          
+          debugReport.integrationTests = {}
+          
+          // Test optimization with current data
+          try {
+            const testPrices = polishData.slice(0, 24).map(r => r.price)
+            if (testPrices.length === 24 && testPrices.every(p => !isNaN(p))) {
+              console.log(`✅ Optimization test: 24 valid price points available`)
+              debugReport.integrationTests.optimizationReady = true
+            } else {
+              console.log(`❌ Optimization test: Insufficient valid price data`)
+              debugReport.integrationTests.optimizationReady = false
+              debugReport.parsingIssues.push(`Insufficient valid price data for optimization`)
+            }
+          } catch (error) {
+            console.log(`❌ Optimization test failed: ${error.message}`)
+            debugReport.integrationTests.optimizationReady = false
+            debugReport.parsingIssues.push(`Optimization test error: ${error.message}`)
+          }
+          
+          // Test aFRR analysis with current data
+          try {
+            if (contractingData && contractingData.data.length >= 24) {
+              console.log(`✅ aFRR analysis test: ${contractingData.data.length} contracting records available`)
+              debugReport.integrationTests.afrrReady = true
+            } else {
+              console.log(`❌ aFRR analysis test: Insufficient contracting data`)
+              debugReport.integrationTests.afrrReady = false
+              debugReport.parsingIssues.push(`Insufficient contracting data for aFRR analysis`)
+            }
+          } catch (error) {
+            console.log(`❌ aFRR analysis test failed: ${error.message}`)
+            debugReport.integrationTests.afrrReady = false
+            debugReport.parsingIssues.push(`aFRR analysis test error: ${error.message}`)
+          }
+          
+          // 9. SUMMARY AND RECOMMENDATIONS
+          console.log('\n9. SUMMARY AND RECOMMENDATIONS')
+          console.log('='.repeat(50))
+          
+          const totalRecords = (debugReport.dataSources.csdac?.totalRecords || 0) + 
+                              (debugReport.dataSources.aggregatedPolish?.totalRecords || 0) + 
+                              (debugReport.dataSources.contracting?.totalRecords || 0)
+          
+          debugReport.summary = {
+            totalRecords,
+            parsingIssuesCount: debugReport.parsingIssues.length,
+            dataSourcesCount: Object.keys(debugReport.dataSources).length,
+            integrationTestsPassed: Object.values(debugReport.integrationTests).filter(Boolean).length,
+            integrationTestsTotal: Object.keys(debugReport.integrationTests).length
+          }
+          
+          console.log(`📊 SUMMARY:`)
+          console.log(`- Total records across all sources: ${totalRecords.toLocaleString()}`)
+          console.log(`- Data sources loaded: ${debugReport.summary.dataSourcesCount}`)
+          console.log(`- Parsing issues found: ${debugReport.summary.parsingIssuesCount}`)
+          console.log(`- Integration tests passed: ${debugReport.summary.integrationTestsPassed}/${debugReport.summary.integrationTestsTotal}`)
+          
+          // Generate recommendations
+          if (debugReport.parsingIssues.length > 0) {
+            console.log(`\n⚠️  RECOMMENDATIONS:`)
+            debugReport.parsingIssues.forEach((issue, index) => {
+              console.log(`${index + 1}. ${issue}`)
+            })
+          }
+          
+          if (debugReport.summary.integrationTestsPassed === debugReport.summary.integrationTestsTotal) {
+            console.log(`\n✅ All integration tests passed! System is ready for use.`)
+          } else {
+            console.log(`\n❌ Some integration tests failed. Check the issues above.`)
+          }
+          
+          // 10. FINAL DEBUG REPORT
+          console.log('\n10. COMPLETE DEBUG REPORT')
+          console.log('='.repeat(50))
           console.log(JSON.stringify(debugReport, null, 2))
           
-          // Set status message with debug info
+          // Set status message with comprehensive summary
+          const statusText = `Debug report generated. Records: ${totalRecords.toLocaleString()}, Issues: ${debugReport.summary.parsingIssuesCount}, Tests: ${debugReport.summary.integrationTestsPassed}/${debugReport.summary.integrationTestsTotal}`
+          
           set({ 
             statusMessage: { 
-              type: 'info', 
-              text: `Debug info generated. Check console for details. Records: CSDAC=${rawCsdac.length}, Polish=${polishData.length}, Contracting=${contractingData.data.length}` 
+              type: debugReport.summary.parsingIssuesCount === 0 ? 'success' : 'warning', 
+              text: statusText
             } 
           })
           

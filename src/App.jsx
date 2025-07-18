@@ -64,13 +64,18 @@ const App = () => {
     setLlmInsight,
     setLlmLoading,
     resetResults,
-    generateDebugInfo
+    generateDebugInfo,
+    initializeWithDataConfig,
+    getDynamicPresets
   } = useOptimizationStore()
 
-  // Load initial data
+  // Load initial data and initialize dynamic configuration
   useEffect(() => {
-    const fetchInitialData = async () => {
+    const initializeApp = async () => {
       try {
+        // Initialize store with dynamic configuration
+        await initializeWithDataConfig()
+        
         // Load day-ahead price data (CSDAC PLN) instead of Poland.csv
         const data = await loadCSDACPLNData()
         setPolishData(data)
@@ -80,8 +85,8 @@ const App = () => {
         setStatusMessage({ type: 'error', text: `Initial data load failed: ${error.message}` })
       }
     }
-    fetchInitialData()
-  }, [setPolishData, setStatusMessage])
+    initializeApp()
+  }, [setPolishData, setStatusMessage, initializeWithDataConfig])
 
   // Generate sample data
   const generateSampleData = useCallback(() => {
@@ -257,19 +262,19 @@ const App = () => {
   }, [setStatusMessage])
 
   // Load current data presets
-  const loadQuickPresets = useCallback(() => {
-    const presets = [
-      { name: 'Last 7 Days', start: '2025-07-11', end: '2025-07-18', type: 'continuous' },
-      { name: 'Last 30 Days', start: '2025-06-18', end: '2025-07-18', type: 'continuous' },
-      { name: 'Current Month', start: '2025-07-01', end: '2025-07-18', type: 'continuous' }
-    ]
-
-    const preset = presets[Math.floor(Math.random() * presets.length)]
-    setStartDate(preset.start)
-    setEndDate(preset.end)
-    setAnalysisType(preset.type)
-    setStatusMessage({ type: 'info', text: `Loaded preset: ${preset.name}` })
-  }, [setStartDate, setEndDate, setAnalysisType, setStatusMessage])
+  const loadQuickPresets = useCallback(async () => {
+    try {
+      const presets = await getDynamicPresets()
+      const preset = presets[Math.floor(Math.random() * presets.length)]
+      setStartDate(preset.start)
+      setEndDate(preset.end)
+      setAnalysisType(preset.type)
+      setStatusMessage({ type: 'info', text: `Loaded preset: ${preset.name}` })
+    } catch (error) {
+      console.error('Failed to load dynamic presets:', error)
+      setStatusMessage({ type: 'error', text: 'Failed to load preset scenarios' })
+    }
+  }, [setStartDate, setEndDate, setAnalysisType, setStatusMessage, getDynamicPresets])
 
   // Run backtest
   const runBacktest = useCallback(async () => {
