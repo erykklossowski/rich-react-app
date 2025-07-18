@@ -71,7 +71,7 @@ const ResultsDashboard = ({ data, isManualInput = false, onBack }) => {
               Electricity Prices
             </CardTitle>
             <CardDescription>
-              Hourly prices with HMM category coloring
+              15-minute prices with HMM category coloring
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -131,7 +131,7 @@ const ResultsDashboard = ({ data, isManualInput = false, onBack }) => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5" />
-              Hourly Revenue
+              15-minute Revenue
             </CardTitle>
             <CardDescription>
               Revenue generated each hour

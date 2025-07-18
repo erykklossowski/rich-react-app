@@ -8,9 +8,10 @@ import ManualInputForm from './components/ManualInputForm'
 import BacktestForm from './components/BacktestForm'
 import ResultsDashboard from './components/ResultsDashboard'
 import BacktestSummary from './components/BacktestSummary'
+import AFRRVisualization from './components/AFRRVisualization'
 import BatteryOptimizer from './utils/BatteryOptimizerClass.js'
-import { loadPolishData, filterDataByDateRange, groupDataByPeriod } from './utils/dataLoaders.js'
-import { Battery, TrendingUp, AlertCircle, CheckCircle, Info } from 'lucide-react'
+import { loadPolishData, loadDayAheadPriceData, filterDataByDateRange, groupDataByPeriod } from './utils/dataLoaders.js'
+import { Battery, TrendingUp, AlertCircle, CheckCircle, Info, Zap } from 'lucide-react'
 import { cn } from './lib/utils'
 
 const optimizer = new BatteryOptimizer()
@@ -69,11 +70,12 @@ const App = () => {
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        const data = await loadPolishData()
-        setPolishData(data)
-        console.log('Polish electricity data preloaded successfully')
+        // Load day-ahead price data (CSDAC PLN) instead of Poland.csv
+        const data = await loadDayAheadPriceData({ lookbackDays: 30, maxRecords: 1000 })
+        setPolishData(data.data)
+        console.log('Day-ahead price data (CSDAC PLN) preloaded successfully')
       } catch (error) {
-        console.log('Could not preload Polish data - will load when needed')
+        console.log('Could not preload day-ahead price data - will load when needed')
         setStatusMessage({ type: 'error', text: `Initial data load failed: ${error.message}` })
       }
     }
@@ -135,20 +137,19 @@ const App = () => {
 
   // Test data connection
   const testDataConnection = useCallback(async () => {
-    setStatusMessage({ type: 'info', text: 'Testing data connection...' })
+    setStatusMessage({ type: 'info', text: 'Testing PSE data connection...' })
     try {
-      const response = await fetch('https://raw.githubusercontent.com/erykklossowski/resslv/refs/heads/main/Poland.csv')
+      const response = await fetch('https://raw.githubusercontent.com/erykklossowski/resslv/main/csdac_pln_data.json')
       if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`)
 
-      const text = await response.text()
-      const lines = text.split('\n').filter(line => line.trim())
-
+      const data = await response.json()
+      
       setStatusMessage({
         type: 'success',
-        text: `Data connection successful! Response status: ${response.status}, Data size: ${text.length} characters, Lines found: ${lines.length}`
+        text: `PSE data connection successful! CSDAC PLN records: ${data.length}, Latest date: ${data[data.length - 1]?.dtime || 'N/A'}`
       })
     } catch (error) {
-      setStatusMessage({ type: 'error', text: `Data connection failed: ${error.message}` })
+      setStatusMessage({ type: 'error', text: `PSE data connection failed: ${error.message}` })
     }
   }, [setStatusMessage])
 
@@ -186,9 +187,9 @@ const App = () => {
       optimizer.reset()
       
       // Load a small sample of real data
-      const data = await loadPolishData()
-      const sampleData = data.slice(0, 48) // Get 48 hours (2 days)
-      const prices = sampleData.map(record => record.price)
+      const data = await loadDayAheadPriceData({ lookbackDays: 2, maxRecords: 48 })
+      const sampleData = data.data.slice(0, 48) // Get 48 hours (2 days)
+      const prices = sampleData.map(record => record.csdac_pln)
       
       console.log('Testing optimizer with real data format:')
       console.log('Sample data records:', sampleData.slice(0, 3))
@@ -254,13 +255,12 @@ const App = () => {
     }
   }, [setStatusMessage])
 
-  // Load quick presets
+  // Load current data presets
   const loadQuickPresets = useCallback(() => {
     const presets = [
-      { name: '2020 COVID Year', start: '2020-01-01', end: '2020-12-31', type: 'monthly' },
-      { name: '2022 Energy Crisis', start: '2022-01-01', end: '2022-12-31', type: 'monthly' },
-      { name: 'Recent 6 Months', start: '2024-12-01', end: '2025-05-31', type: 'monthly' },
-      { name: 'Last 5 Years', start: '2020-01-01', end: '2024-12-31', type: 'yearly' }
+      { name: 'Last 7 Days', start: '2025-07-11', end: '2025-07-18', type: 'continuous' },
+      { name: 'Last 30 Days', start: '2025-06-18', end: '2025-07-18', type: 'continuous' },
+      { name: 'Current Month', start: '2025-07-01', end: '2025-07-18', type: 'continuous' }
     ]
 
     const preset = presets[Math.floor(Math.random() * presets.length)]
@@ -519,14 +519,14 @@ Max SoC (MWh): ${params.socMax}
 Efficiency: ${params.efficiency}
 
 **Performance Metrics:**
-Total Revenue: €${result.totalRevenue.toFixed(2)}
+                Total Revenue: PLN ${result.totalRevenue.toFixed(2)}
 Energy Discharged: ${result.totalEnergyDischarged.toFixed(1)} MWh
 Energy Charged: ${result.totalEnergyCharged.toFixed(1)} MWh
 Operational Efficiency: ${(result.operationalEfficiency * 100).toFixed(1)}%
-Average Market Price: €${result.avgPrice.toFixed(2)}/MWh
+Average Market Price: PLN ${result.avgPrice.toFixed(2)}/MWh
 Battery Cycles: ${result.cycles.toFixed(2)}
-VWAP Charge Price: €${result.vwapCharge.toFixed(2)}/MWh
-VWAP Discharge Price: €${result.vwapDischarge.toFixed(2)}/MWh
+VWAP Charge Price: PLN ${result.vwapCharge.toFixed(2)}/MWh
+VWAP Discharge Price: PLN ${result.vwapDischarge.toFixed(2)}/MWh
 
 Based on these metrics, what are the key takeaways? Suggest 1-3 actionable strategies or areas for further investigation to improve profitability or operational effectiveness. Keep the response under 200 words.`
 
@@ -651,6 +651,16 @@ Based on these metrics, what are the key takeaways? Suggest 1-3 actionable strat
                 Historical Backtest
               </button>
               <button
+                onClick={() => handleTabChange('afrr')}
+                className={cn(
+                  "amiga-tab w-full mb-2",
+                  activeTab === 'afrr' && "active"
+                )}
+              >
+                <Zap className="h-3 w-3 inline mr-1" />
+                aFRR Analysis
+              </button>
+              <button
                 onClick={testOptimizer}
                 className="amiga-tab w-full mb-2"
               >
@@ -700,6 +710,13 @@ Based on these metrics, what are the key takeaways? Suggest 1-3 actionable strat
               onLoadPresets={loadQuickPresets}
               onTestConnection={testDataConnection}
             />
+          </div>
+        )}
+
+        {/* AFRR Analysis */}
+        {activeTab === 'afrr' && (
+          <div className="lg:col-span-2 xl:col-span-2">
+            <AFRRVisualization />
           </div>
         )}
 

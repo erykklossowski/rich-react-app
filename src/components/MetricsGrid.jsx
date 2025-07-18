@@ -2,7 +2,6 @@ import React from 'react'
 import { motion } from 'framer-motion'
 import { Card, CardContent } from './ui/card'
 import { 
-  Euro, 
   Battery, 
   TrendingUp, 
   Zap, 
@@ -18,7 +17,7 @@ const MetricsGrid = ({ result }) => {
     {
       title: 'Total Revenue',
       value: formatCurrency(result.totalRevenue),
-      icon: Euro,
+      icon: TrendingUp,
       color: 'from-green-500 to-emerald-600',
       description: 'Total revenue generated'
     },

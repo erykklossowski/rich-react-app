@@ -71,10 +71,11 @@ const BacktestForm = ({ onRunBacktest, onLoadPresets, onTestConnection }) => {
               <span className="text-xs font-bold">Polish Electricity Market</span>
             </div>
             <div className="text-xs text-[#555555] space-y-1">
-              <div><strong>Period:</strong> 2015-2025</div>
-              <div><strong>Records:</strong> 91,790 hourly</div>
-              <div><strong>Price Range:</strong> -133 to 771 €/MWh</div>
-              <div><strong>Average:</strong> 73.72 €/MWh</div>
+              <div><strong>Period:</strong> 2024-06-14 to 2025-07-18</div>
+              <div><strong>Records:</strong> 38,400 (15-min resolution)</div>
+              <div><strong>Price Range:</strong> -567.92 to 2,748.07 PLN/MWh</div>
+              <div><strong>Average:</strong> 445.40 PLN/MWh</div>
+              <div><strong>Data Source:</strong> PSE CSDAC PLN</div>
             </div>
           </div>
         </div>
@@ -97,16 +98,16 @@ const BacktestForm = ({ onRunBacktest, onLoadPresets, onTestConnection }) => {
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  min="2015-01-01"
-                  max="2025-06-21"
+                  min="2024-06-14"
+                  max="2025-07-18"
                   className="amiga-input text-xs"
                 />
                 <input
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  min="2015-01-01"
-                  max="2025-06-21"
+                  min="2024-06-14"
+                  max="2025-07-18"
                   className="amiga-input text-xs"
                 />
               </div>

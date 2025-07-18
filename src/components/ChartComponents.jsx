@@ -14,7 +14,7 @@ export const PriceChart = ({ data, priceCategories, title }) => {
     const chartData = {
         labels: hours,
         datasets: [{
-            label: 'Price (€/MWh)',
+            label: 'Price (PLN/MWh)',
             data: data,
             borderColor: '#667eea',
             backgroundColor: 'rgba(102, 126, 234, 0.1)',
@@ -35,10 +35,10 @@ export const PriceChart = ({ data, priceCategories, title }) => {
             title: { display: true, text: title },
             legend: { display: true }
         },
-        scales: {
-            y: { beginAtZero: false, title: { display: true, text: 'Price (€/MWh)' } },
-            x: { title: { display: true, text: 'Hour' } }
-        }
+                  scales: {
+            y: { beginAtZero: false, title: { display: true, text: 'Price (PLN/MWh)' } },
+            x: { title: { display: true, text: 'Time Period' } }
+          }
     };
     return <Line data={chartData} options={options} />;
 };
@@ -126,7 +126,7 @@ export const RevenueChart = ({ data, title }) => {
     const chartData = {
         labels: hours,
         datasets: [{
-            label: 'Hourly Revenue (€)',
+            label: 'Hourly Revenue (PLN)',
             data: data,
             backgroundColor: data.map(r => r >= 0 ? 'rgba(39, 174, 96, 0.7)' : 'rgba(231, 76, 60, 0.7)'),
             borderColor: data.map(r => r >= 0 ? '#27ae60' : '#e74c3c'),
@@ -139,10 +139,10 @@ export const RevenueChart = ({ data, title }) => {
             title: { display: true, text: title },
             legend: { display: true }
         },
-        scales: {
-            y: { title: { display: true, text: 'Revenue (€)' } },
-            x: { title: { display: true, text: 'Hour' } }
-        }
+                  scales: {
+            y: { title: { display: true, text: 'Revenue (PLN)' } },
+            x: { title: { display: true, text: 'Time Period' } }
+          }
     };
     return <Bar data={chartData} options={options} />;
 };

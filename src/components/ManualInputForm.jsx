@@ -55,13 +55,13 @@ const ManualInputForm = ({ onOptimize, onGenerateSample }) => {
               <span className="text-xs font-bold">Day-Ahead Electricity Prices</span>
             </div>
             <textarea
-              placeholder="45.2, 38.7, 35.1, 42.8, 55.3, 67.9, 89.4, 95.2, 87.6, 78.3, 65.4, 58.7, 52.1, 49.8, 46.3, 43.9, 48.2, 56.7, 72.8, 89.3, 95.8, 88.4, 76.2, 63.5"
+              placeholder="445.2, 438.7, 435.1, 442.8, 455.3, 467.9, 489.4, 495.2, 487.6, 478.3, 465.4, 458.7, 452.1, 449.8, 446.3, 443.9, 448.2, 456.7, 472.8, 489.3, 495.8, 488.4, 476.2, 463.5"
               value={priceData}
               onChange={(e) => setPriceData(e.target.value)}
               className="amiga-input w-full h-24 resize-none text-xs"
             />
             <p className="text-xs text-[#555555] mt-1">
-              Enter 24 comma-separated values (EUR/MWh)
+              Enter 24 comma-separated values (PLN/MWh) - Current PSE day-ahead prices
             </p>
           </div>
         </div>

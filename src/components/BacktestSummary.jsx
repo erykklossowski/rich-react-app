@@ -107,7 +107,7 @@ const BacktestSummary = ({ backtestResults, onShowPeriodDetail }) => {
                 <p className="text-sm opacity-90">Total Revenue</p>
                 <p className="text-2xl font-bold">{formatCurrency(totalRevenue)}</p>
               </div>
-              <Euro className="h-8 w-8 opacity-80" />
+              <TrendingUp className="h-8 w-8 opacity-80" />
             </div>
           </CardContent>
         </Card>
@@ -203,7 +203,7 @@ const BacktestSummary = ({ backtestResults, onShowPeriodDetail }) => {
               data={{
                 labels: results.map(r => r.period),
                 datasets: [{
-                  label: 'Revenue (€)',
+                  label: 'Revenue (PLN)',
                   data: results.map(r => r.totalRevenue),
                   borderColor: '#667eea',
                   backgroundColor: 'rgba(102, 126, 234, 0.1)',
@@ -222,7 +222,7 @@ const BacktestSummary = ({ backtestResults, onShowPeriodDetail }) => {
                 },
                 scales: {
                   y: { 
-                    title: { display: true, text: 'Revenue (€)' },
+                    title: { display: true, text: 'Revenue (PLN)' },
                     beginAtZero: true
                   },
                   x: { title: { display: true, text: 'Period' } }
