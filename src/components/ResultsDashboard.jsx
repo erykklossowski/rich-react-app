@@ -7,7 +7,7 @@ import InteractiveChart from './InteractiveChart'
 import MetricsGrid from './MetricsGrid'
 import AIInsights from './AIInsights'
 import DebugReport from './DebugReport'
-import { ArrowLeft, BarChart3, Table, TrendingUp } from 'lucide-react'
+import { ArrowLeft, BarChart3, Table, TrendingUp, AlertCircle } from 'lucide-react'
 import { formatCurrency, formatNumber } from '../lib/utils'
 
 const ResultsDashboard = ({ data, isManualInput = false, onBack }) => {
@@ -16,6 +16,70 @@ const ResultsDashboard = ({ data, isManualInput = false, onBack }) => {
   if (!data) return null
   
   const { result, prices, params, title } = data
+
+  // Validate that we have valid schedule data
+  const hasValidSchedule = result && result.schedule && 
+    Array.isArray(result.schedule.soc) && 
+    Array.isArray(result.schedule.charging) && 
+    Array.isArray(result.schedule.discharging) && 
+    Array.isArray(result.schedule.revenue) &&
+    result.schedule.soc.length > 0
+
+  if (!hasValidSchedule) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="space-y-6"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-3xl font-bold text-foreground">{title}</h2>
+            <p className="text-muted-foreground mt-1">
+              Optimization results and detailed analysis
+            </p>
+          </div>
+          {!isManualInput && (
+            <Button
+              onClick={onBack}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Summary
+            </Button>
+          )}
+        </div>
+
+        {/* Error Message */}
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-6 w-6 text-red-600" />
+            <div>
+              <h3 className="text-lg font-semibold text-red-800">No Valid Schedule Data</h3>
+              <p className="text-red-700 mt-1">
+                This period has no valid optimization schedule data. This could be due to:
+              </p>
+              <ul className="list-disc list-inside text-red-600 mt-2 space-y-1">
+                <li>Insufficient price data for optimization</li>
+                <li>Optimization failed for this period</li>
+                <li>Zero revenue period with no trading activity</li>
+              </ul>
+              <div className="mt-4">
+                <p className="text-sm text-red-600">
+                  <strong>Period:</strong> {result?.period || 'Unknown'}<br/>
+                  <strong>Total Revenue:</strong> {result?.totalRevenue ? formatCurrency(result.totalRevenue) : 'N/A'}<br/>
+                  <strong>Data Points:</strong> {result?.dataPoints || 0}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    )
+  }
 
   return (
     <motion.div

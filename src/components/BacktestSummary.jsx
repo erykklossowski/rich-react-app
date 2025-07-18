@@ -201,7 +201,22 @@ const BacktestSummary = ({ backtestResults, onShowPeriodDetail }) => {
           <CardContent>
             <Line
               data={{
-                labels: results.map(r => r.period),
+                labels: results.map(r => {
+                  // Format period labels properly
+                  if (r.period.includes('-')) {
+                    // Monthly format: "2024-06" -> "Jun 2024"
+                    const [year, month] = r.period.split('-');
+                    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    return `${monthNames[parseInt(month) - 1]} ${year}`;
+                  } else if (r.period.includes('Q')) {
+                    // Quarterly format: "2024-Q1" -> "Q1 2024"
+                    return r.period.replace('-', ' ');
+                  } else {
+                    // Yearly or other format
+                    return r.period;
+                  }
+                }),
                 datasets: [{
                   label: 'Revenue (PLN)',
                   data: results.map(r => r.totalRevenue),
@@ -218,14 +233,41 @@ const BacktestSummary = ({ backtestResults, onShowPeriodDetail }) => {
               options={{
                 responsive: true,
                 plugins: {
-                  legend: { display: false }
+                  legend: { display: false },
+                  tooltip: {
+                    callbacks: {
+                      title: (context) => {
+                        return `Period: ${context[0].label}`;
+                      },
+                      label: (context) => {
+                        const result = results[context.dataIndex];
+                        return [
+                          `Revenue: ${formatCurrency(context.parsed.y)}`,
+                          `Energy: ${formatNumber(result.totalEnergyDischarged)} MWh`,
+                          `Data Points: ${result.dataPoints}`
+                        ];
+                      }
+                    }
+                  }
                 },
                 scales: {
                   y: { 
                     title: { display: true, text: 'Revenue (PLN)' },
-                    beginAtZero: true
+                    beginAtZero: true,
+                    grid: {
+                      color: 'rgba(0, 0, 0, 0.05)',
+                      drawBorder: false,
+                      lineWidth: 0.5
+                    }
                   },
-                  x: { title: { display: true, text: 'Period' } }
+                  x: { 
+                    title: { display: true, text: 'Period' },
+                    grid: {
+                      color: 'rgba(0, 0, 0, 0.03)',
+                      drawBorder: false,
+                      lineWidth: 0.5
+                    }
+                  }
                 }
               }}
             />

@@ -153,9 +153,9 @@ const AFRRVisualization = () => {
     }
 
     return (
-        <div className="p-6 space-y-6">
-            <div className="bg-white rounded-lg shadow-md p-6">
-                <h2 className="text-2xl font-bold mb-4">aFRR Market Analysis</h2>
+        <div className="p-6 space-y-6 bg-gray-50 min-h-screen">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h2 className="text-2xl font-bold mb-4 text-gray-900">aFRR Market Analysis</h2>
                 
                 {/* Controls */}
                 <div className="space-y-4 mb-6">

@@ -1,8 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Line, Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend, Filler } from 'chart.js';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
 import { TrendingUp, Battery, Zap, DollarSign, BarChart3, Settings } from 'lucide-react';
 
 // Register Chart.js components
@@ -18,7 +16,7 @@ const InteractiveChart = ({
   timestamps = null,
   title = "Interactive Data Visualization"
 }) => {
-  const [selectedData, setSelectedData] = useState('prices');
+  const [selectedDataSeries, setSelectedDataSeries] = useState(['prices']);
   const [chartType, setChartType] = useState('line');
 
   // Chart configuration options
@@ -70,9 +68,13 @@ const InteractiveChart = ({
   // Generate labels: use timestamps if available, otherwise use indices
   const labels = useMemo(() => {
     if (timestamps) {
-      return timestamps.map(ts => {
+      return timestamps.map((ts, index) => {
         try {
           const date = new Date(ts);
+          if (isNaN(date.getTime())) {
+            console.error('Invalid date:', ts);
+            return `Invalid-${index}`;
+          }
           return date.toLocaleString('pl-PL', { 
             month: 'short', 
             day: 'numeric', 
@@ -80,80 +82,128 @@ const InteractiveChart = ({
             minute: '2-digit' 
           });
         } catch (error) {
-          return ts;
+          console.error('Date parsing error:', error, 'timestamp:', ts);
+          return `Error-${index}`;
         }
       });
     }
     return Array.from({ length: Math.max(prices.length, soc.length, charging.length, revenue.length) }, (_, i) => i + 1);
   }, [timestamps, prices.length, soc.length, charging.length, revenue.length]);
 
-  const currentConfig = chartOptions[selectedData];
-  const isBarChart = currentConfig.chartType === 'bar';
+  // Handle series selection toggle
+  const toggleSeries = (seriesKey) => {
+    setSelectedDataSeries(prev => {
+      if (prev.includes(seriesKey)) {
+        return prev.filter(key => key !== seriesKey);
+      } else {
+        return [...prev, seriesKey];
+      }
+    });
+  };
 
-  // Prepare chart data based on selected data type
+  // Prepare chart data based on selected data series
   const chartData = useMemo(() => {
-    if (selectedData === 'power') {
-      return {
-        labels,
-        datasets: [
-          {
-            label: 'Charging Power (MW)',
-            data: currentConfig.data.charging,
-            backgroundColor: 'rgba(52, 152, 219, 0.7)',
-            borderColor: '#3498db',
-            borderWidth: 1
-          },
-          {
-            label: 'Discharging Power (MW)',
-            data: currentConfig.data.discharging,
-            backgroundColor: 'rgba(231, 76, 60, 0.7)',
-            borderColor: '#e74c3c',
-            borderWidth: 1
-          }
-        ]
-      };
-    } else if (selectedData === 'revenue') {
-      return {
-        labels,
-        datasets: [{
-          label: currentConfig.label,
-          data: currentConfig.data,
-          backgroundColor: currentConfig.data.map(r => r >= 0 ? 'rgba(39, 174, 96, 0.7)' : 'rgba(231, 76, 60, 0.7)'),
-          borderColor: currentConfig.data.map(r => r >= 0 ? '#27ae60' : '#e74c3c'),
-          borderWidth: 1
-        }]
-      };
-    } else {
-      return {
-        labels,
-        datasets: [{
-          label: currentConfig.label,
-          data: currentConfig.data,
-          borderColor: currentConfig.color,
-          backgroundColor: currentConfig.backgroundColor,
-          pointBackgroundColor: currentConfig.pointColors || currentConfig.color,
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
-          pointRadius: 4,
-          tension: 0.3,
-          fill: true
-        }]
-      };
+    const datasets = [];
+
+    // Add prices if selected
+    if (selectedDataSeries.includes('prices')) {
+      datasets.push({
+        label: 'Electricity Prices (PLN/MWh)',
+        data: prices,
+        borderColor: '#667eea',
+        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+        pointBackgroundColor: priceCategories ? priceCategories.map(cat => 
+          cat === 1 ? '#3498db' : cat === 2 ? '#f39c12' : '#e74c3c'
+        ) : '#667eea',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        tension: 0.3,
+        fill: true,
+        yAxisID: 'y'
+      });
     }
-  }, [selectedData, currentConfig, labels]);
+
+    // Add SOC if selected
+    if (selectedDataSeries.includes('soc')) {
+      datasets.push({
+        label: 'Battery State of Charge (MWh)',
+        data: soc,
+        borderColor: '#27ae60',
+        backgroundColor: 'rgba(39, 174, 96, 0.1)',
+        pointBackgroundColor: '#27ae60',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointRadius: 3,
+        tension: 0.3,
+        fill: true,
+        yAxisID: 'y1'
+      });
+    }
+
+    // Add power if selected
+    if (selectedDataSeries.includes('power')) {
+      datasets.push({
+        label: 'Charging Power (MW)',
+        data: charging.map(p => -p), // Negative values for charging
+        backgroundColor: 'rgba(52, 152, 219, 0.7)',
+        borderColor: '#3498db',
+        borderWidth: 1,
+        yAxisID: 'y2'
+      });
+      datasets.push({
+        label: 'Discharging Power (MW)',
+        data: discharging,
+        backgroundColor: 'rgba(231, 76, 60, 0.7)',
+        borderColor: '#e74c3c',
+        borderWidth: 1,
+        yAxisID: 'y2'
+      });
+    }
+
+    // Add revenue if selected
+    if (selectedDataSeries.includes('revenue')) {
+      datasets.push({
+        label: 'Hourly Revenue (PLN)',
+        data: revenue,
+        backgroundColor: revenue.map(r => r >= 0 ? 'rgba(39, 174, 96, 0.7)' : 'rgba(231, 76, 60, 0.7)'),
+        borderColor: revenue.map(r => r >= 0 ? '#27ae60' : '#e74c3c'),
+        borderWidth: 1,
+        yAxisID: 'y3'
+      });
+    }
+
+    return {
+      labels,
+      datasets
+    };
+  }, [selectedDataSeries, prices, priceCategories, soc, charging, discharging, revenue, labels]);
 
   const options = {
     responsive: true,
+    maintainAspectRatio: false,
     plugins: {
       title: { 
         display: true, 
-        text: `${currentConfig.label} - ${title}`,
+        text: `${title} - Interactive Analysis`,
         font: { size: 16, weight: 'bold' }
       },
-      legend: { display: true },
+      legend: { 
+        display: true,
+        labels: {
+          usePointStyle: true,
+          padding: 20
+        }
+      },
       tooltip: {
         mode: 'index',
         intersect: false,
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        titleColor: 'white',
+        bodyColor: 'white',
+        borderColor: 'rgba(255, 255, 255, 0.2)',
+        borderWidth: 1,
+        cornerRadius: 8,
         callbacks: {
           title: (context) => {
             return `Time: ${context[0].label}`;
@@ -161,13 +211,13 @@ const InteractiveChart = ({
           label: (context) => {
             const label = context.dataset.label || '';
             const value = context.parsed.y;
-            if (selectedData === 'prices') {
+            if (selectedDataSeries.includes('prices')) {
               return `${label}: ${value.toFixed(2)} PLN/MWh`;
-            } else if (selectedData === 'soc') {
+            } else if (selectedDataSeries.includes('soc')) {
               return `${label}: ${value.toFixed(2)} MWh`;
-            } else if (selectedData === 'power') {
+            } else if (selectedDataSeries.includes('power')) {
               return `${label}: ${Math.abs(value).toFixed(2)} MW`;
-            } else if (selectedData === 'revenue') {
+            } else if (selectedDataSeries.includes('revenue')) {
               return `${label}: ${value.toFixed(2)} PLN`;
             }
             return `${label}: ${value}`;
@@ -177,22 +227,91 @@ const InteractiveChart = ({
     },
     scales: {
       y: { 
-        beginAtZero: selectedData === 'soc' || selectedData === 'revenue',
-        title: { display: true, text: currentConfig.yAxisLabel },
+        type: 'linear',
+        display: selectedDataSeries.includes('prices'),
+        position: 'left',
+        title: { display: true, text: 'Price (PLN/MWh)' },
         grid: {
-          color: 'rgba(0, 0, 0, 0.1)',
-          drawBorder: false
+          color: 'rgba(0, 0, 0, 0.05)',
+          drawBorder: false,
+          lineWidth: 0.5
+        },
+        ticks: {
+          font: { size: 12 }
+        }
+      },
+      y1: {
+        type: 'linear',
+        display: selectedDataSeries.includes('soc'),
+        position: 'right',
+        title: { display: true, text: 'Energy (MWh)' },
+        beginAtZero: true,
+        grid: {
+          drawOnChartArea: false,
+        },
+        ticks: {
+          font: { size: 12 }
+        }
+      },
+      y2: {
+        type: 'linear',
+        display: selectedDataSeries.includes('power'),
+        position: 'right',
+        title: { display: true, text: 'Power (MW)' },
+        grid: {
+          drawOnChartArea: false,
+        },
+        ticks: {
+          font: { size: 12 }
+        }
+      },
+      y3: {
+        type: 'linear',
+        display: selectedDataSeries.includes('revenue'),
+        position: 'right',
+        title: { display: true, text: 'Revenue (PLN)' },
+        beginAtZero: true,
+        grid: {
+          drawOnChartArea: false,
+        },
+        ticks: {
+          font: { size: 12 }
         }
       },
       x: { 
-        title: { display: true, text: timestamps ? 'Date & Time' : 'Time Period' },
+        title: { 
+          display: true, 
+          text: timestamps ? 'Date & Time' : 'Time Period',
+          font: { weight: 'bold' }
+        },
         ticks: {
-          maxTicksLimit: timestamps ? 10 : 20,
-          maxRotation: 45
+          maxTicksLimit: timestamps ? 15 : 20,
+          maxRotation: 45,
+          font: { size: 11 },
+          callback: function(value, index, values) {
+            if (timestamps) {
+              try {
+                const date = new Date(this.getLabelForValue(value));
+                if (isNaN(date.getTime())) {
+                  return 'Invalid Date';
+                }
+                return date.toLocaleString('pl-PL', { 
+                  month: 'short', 
+                  day: 'numeric', 
+                  hour: '2-digit', 
+                  minute: '2-digit' 
+                });
+              } catch (error) {
+                return 'Invalid Date';
+              }
+            }
+            return value;
+          }
         },
         grid: {
-          color: 'rgba(0, 0, 0, 0.05)',
-          drawBorder: false
+          color: 'rgba(0, 0, 0, 0.03)',
+          drawBorder: false,
+          lineWidth: 0.5
         }
       }
     },
@@ -205,190 +324,147 @@ const InteractiveChart = ({
       point: {
         hoverRadius: 6,
         hoverBorderWidth: 3
+      },
+      line: {
+        tension: 0.1
       }
     }
   };
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
+    <div className="w-full bg-white rounded-lg border border-gray-200 p-6">
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <BarChart3 className="h-5 w-5" />
-            Interactive Data Visualization
+            <BarChart3 className="h-5 w-5 text-blue-600" />
+            <h3 className="text-lg font-semibold text-gray-900">Interactive Data Visualization</h3>
           </div>
           <div className="flex items-center gap-2">
-            <Settings className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Controls</span>
+            <Settings className="h-4 w-4 text-gray-500" />
+            <span className="text-sm text-gray-500">Multi-Series Controls</span>
           </div>
-        </CardTitle>
-        <CardDescription>
-          Toggle between different data views using the controls below
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Data Type Selector */}
+        </div>
+        <p className="text-sm text-gray-600">
+          Select multiple data series to display simultaneously. Toggle between different data views using the controls below.
+        </p>
+      </div>
+      
+      <div className="space-y-4">
+        {/* Multi-Series Selector */}
         <div className="flex flex-wrap gap-2">
           {Object.entries(chartOptions).map(([key, config]) => (
-            <Button
+            <button
               key={key}
-              variant={selectedData === key ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSelectedData(key)}
-              className="flex items-center gap-2"
+              onClick={() => toggleSeries(key)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                selectedDataSeries.includes(key)
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
             >
               {config.icon}
               {config.label}
-            </Button>
+              {selectedDataSeries.includes(key) && (
+                <span className="ml-1 text-xs">✓</span>
+              )}
+            </button>
           ))}
         </div>
 
-        {/* Chart Type Selector (for compatible data types) */}
-        {selectedData !== 'power' && selectedData !== 'revenue' && (
-          <div className="flex gap-2">
-            <Button
-              variant={chartType === 'line' ? "default" : "outline"}
-              size="sm"
-              onClick={() => setChartType('line')}
-            >
-              Line Chart
-            </Button>
-            <Button
-              variant={chartType === 'bar' ? "default" : "outline"}
-              size="sm"
-              onClick={() => setChartType('bar')}
-            >
-              Bar Chart
-            </Button>
-          </div>
-        )}
+        {/* Chart Type Selector */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setChartType('line')}
+            className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              chartType === 'line'
+                ? 'bg-green-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Line Chart
+          </button>
+          <button
+            onClick={() => setChartType('bar')}
+            className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              chartType === 'bar'
+                ? 'bg-green-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Bar Chart
+          </button>
+        </div>
 
         {/* Data Statistics */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted rounded-lg">
-          {selectedData === 'prices' && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
+          {selectedDataSeries.includes('prices') && (
             <>
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-600">
                   {prices.length > 0 ? Math.min(...prices).toFixed(0) : 'N/A'}
                 </div>
-                <div className="text-xs text-muted-foreground">Min Price</div>
+                <div className="text-xs text-gray-600">Min Price</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-green-600">
                   {prices.length > 0 ? Math.max(...prices).toFixed(0) : 'N/A'}
                 </div>
-                <div className="text-xs text-muted-foreground">Max Price</div>
+                <div className="text-xs text-gray-600">Max Price</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-purple-600">
                   {prices.length > 0 ? (prices.reduce((a, b) => a + b, 0) / prices.length).toFixed(0) : 'N/A'}
                 </div>
-                <div className="text-xs text-muted-foreground">Avg Price</div>
+                <div className="text-xs text-gray-600">Avg Price</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-orange-600">
                   {prices.length}
                 </div>
-                <div className="text-xs text-muted-foreground">Data Points</div>
+                <div className="text-xs text-gray-600">Data Points</div>
               </div>
             </>
           )}
-          {selectedData === 'soc' && (
-            <>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">
-                  {soc.length > 0 ? Math.min(...soc).toFixed(1) : 'N/A'}
-                </div>
-                <div className="text-xs text-muted-foreground">Min SoC</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">
-                  {soc.length > 0 ? Math.max(...soc).toFixed(1) : 'N/A'}
-                </div>
-                <div className="text-xs text-muted-foreground">Max SoC</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-purple-600">
-                  {soc.length > 0 ? (Math.max(...soc) - Math.min(...soc)).toFixed(1) : 'N/A'}
-                </div>
-                <div className="text-xs text-muted-foreground">SoC Range</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-orange-600">
-                  {soc.length}
-                </div>
-                <div className="text-xs text-muted-foreground">Data Points</div>
-              </div>
-            </>
-          )}
-          {selectedData === 'power' && (
-            <>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">
-                  {charging.length > 0 ? Math.max(...charging).toFixed(1) : 'N/A'}
-                </div>
-                <div className="text-xs text-muted-foreground">Max Charge</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-red-600">
-                  {discharging.length > 0 ? Math.max(...discharging).toFixed(1) : 'N/A'}
-                </div>
-                <div className="text-xs text-muted-foreground">Max Discharge</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-purple-600">
-                  {charging.length > 0 ? charging.reduce((a, b) => a + b, 0).toFixed(1) : 'N/A'}
-                </div>
-                <div className="text-xs text-muted-foreground">Total Charge</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-orange-600">
-                  {discharging.length > 0 ? discharging.reduce((a, b) => a + b, 0).toFixed(1) : 'N/A'}
-                </div>
-                <div className="text-xs text-muted-foreground">Total Discharge</div>
-              </div>
-            </>
-          )}
-          {selectedData === 'revenue' && (
+          {selectedDataSeries.includes('revenue') && (
             <>
               <div className="text-center">
                 <div className="text-2xl font-bold text-red-600">
                   {revenue.length > 0 ? Math.min(...revenue).toFixed(0) : 'N/A'}
                 </div>
-                <div className="text-xs text-muted-foreground">Min Revenue</div>
+                <div className="text-xs text-gray-600">Min Revenue</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-green-600">
                   {revenue.length > 0 ? Math.max(...revenue).toFixed(0) : 'N/A'}
                 </div>
-                <div className="text-xs text-muted-foreground">Max Revenue</div>
+                <div className="text-xs text-gray-600">Max Revenue</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-purple-600">
                   {revenue.length > 0 ? revenue.reduce((a, b) => a + b, 0).toFixed(0) : 'N/A'}
                 </div>
-                <div className="text-xs text-muted-foreground">Total Revenue</div>
+                <div className="text-xs text-gray-600">Total Revenue</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-orange-600">
                   {revenue.length}
                 </div>
-                <div className="text-xs text-muted-foreground">Data Points</div>
+                <div className="text-xs text-gray-600">Data Points</div>
               </div>
             </>
           )}
         </div>
 
         {/* Chart */}
-        <div className="w-full h-96">
-          {isBarChart ? (
+        <div className="w-full h-[500px] relative">
+          {chartType === 'bar' ? (
             <Bar data={chartData} options={options} />
           ) : (
             <Line data={chartData} options={options} />
           )}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 };
 

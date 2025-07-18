@@ -1,9 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Line, Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend, Filler } from 'chart.js';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
-import { TrendingUp, Battery, Zap, DollarSign, BarChart3, Settings, Activity, Table } from 'lucide-react';
+import { Activity, TrendingUp, BarChart3, Zap, Settings } from 'lucide-react';
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend, Filler);
@@ -17,7 +15,7 @@ const AFRRInteractiveChart = ({
   emissionMatrix = [],
   title = "aFRR Market Analysis"
 }) => {
-  const [selectedData, setSelectedData] = useState('contracting');
+  const [selectedDataSeries, setSelectedDataSeries] = useState(['contracting']);
   const [chartType, setChartType] = useState('line');
 
   // Chart configuration options
@@ -48,22 +46,10 @@ const AFRRInteractiveChart = ({
       yAxisLabel: 'State Category',
       chartType: 'line',
       data: contractingStates
-    },
-    comparison: {
-      label: 'Viterbi vs Observed',
-      icon: <Zap className="h-4 w-4" />,
-      color: '#FF6384',
-      backgroundColor: 'rgba(255, 99, 132, 0.1)',
-      yAxisLabel: 'State Category',
-      chartType: 'line',
-      data: {
-        viterbi: viterbiPath,
-        observed: contractingStates
-      }
     }
   };
 
-  // Generate labels from timestamps
+  // Generate labels from timestamps with proper error handling
   const labels = useMemo(() => {
     return timestamps.map((timestamp, index) => {
       try {
@@ -85,9 +71,6 @@ const AFRRInteractiveChart = ({
     });
   }, [timestamps]);
 
-  const currentConfig = chartOptions[selectedData];
-  const isBarChart = currentConfig.chartType === 'bar';
-
   // State colors and names
   const stateColors = {
     1: 'rgba(255, 99, 132, 0.8)',   // Undercontracted - Red
@@ -101,97 +84,113 @@ const AFRRInteractiveChart = ({
     3: 'Overcontracted'
   };
 
-  // Prepare chart data based on selected data type
+  // Handle series selection toggle
+  const toggleSeries = (seriesKey) => {
+    setSelectedDataSeries(prev => {
+      if (prev.includes(seriesKey)) {
+        return prev.filter(key => key !== seriesKey);
+      } else {
+        return [...prev, seriesKey];
+      }
+    });
+  };
+
+  // Prepare chart data based on selected data series
   const chartData = useMemo(() => {
-    if (selectedData === 'comparison') {
-      return {
-        labels,
-        datasets: [
-          {
-            label: 'Viterbi Path (Predicted)',
-            data: currentConfig.data.viterbi,
-            borderColor: 'rgb(153, 102, 255)',
-            backgroundColor: currentConfig.data.viterbi.map(state => stateColors[state]),
-            borderWidth: 3,
-            pointRadius: 6,
-            pointHoverRadius: 8,
-            tension: 0.1,
-            pointStyle: 'circle'
-          },
-          {
-            label: 'Observed States',
-            data: currentConfig.data.observed,
-            borderColor: 'rgba(201, 203, 207, 0.9)',
-            backgroundColor: currentConfig.data.observed.map(state => stateColors[state]),
-            borderWidth: 2,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-            tension: 0,
-            pointStyle: 'rect'
-          }
-        ]
-      };
-    } else if (selectedData === 'viterbi') {
-      return {
-        labels,
-        datasets: [{
-          label: currentConfig.label,
-          data: currentConfig.data,
-          borderColor: currentConfig.color,
-          backgroundColor: currentConfig.data.map(state => stateColors[state]),
-          borderWidth: 3,
-          pointRadius: 6,
-          pointHoverRadius: 8,
-          tension: 0.1,
-          pointStyle: 'circle'
-        }]
-      };
-    } else if (selectedData === 'states') {
-      return {
-        labels,
-        datasets: [{
-          label: currentConfig.label,
-          data: currentConfig.data,
-          borderColor: currentConfig.color,
-          backgroundColor: currentConfig.data.map(state => stateColors[state]),
-          borderWidth: 2,
-          pointRadius: 4,
-          pointHoverRadius: 6,
-          tension: 0,
-          pointStyle: 'rect'
-        }]
-      };
-    } else {
-      // Contracting status with average line
+    const datasets = [];
+
+    // Add contracting status if selected
+    if (selectedDataSeries.includes('contracting')) {
       const avgValue = contractingValues.length > 0 ? 
         contractingValues.reduce((sum, val) => sum + val, 0) / contractingValues.length : 0;
       
-      return {
-        labels,
-        datasets: [
-          {
-            label: 'Contracting Status (sk_d1_fcst)',
-            data: currentConfig.data,
-            borderColor: currentConfig.color,
-            backgroundColor: currentConfig.backgroundColor,
-            borderWidth: 2,
-            fill: true,
-            tension: 0.1
-          },
-          {
-            label: 'Average',
-            data: Array(currentConfig.data.length).fill(avgValue),
-            borderColor: 'rgba(255, 99, 132, 0.5)',
-            backgroundColor: 'rgba(255, 99, 132, 0.1)',
-            borderWidth: 1,
-            borderDash: [5, 5],
-            fill: false,
-            pointRadius: 0
-          }
-        ]
-      };
+      datasets.push({
+        label: 'Contracting Status (MW)',
+        data: contractingValues,
+        borderColor: '#4BC0C0',
+        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+        borderWidth: 2,
+        fill: false,
+        tension: 0.1,
+        yAxisID: 'y'
+      });
+
+      // Add average line
+      datasets.push({
+        label: 'Average',
+        data: Array(contractingValues.length).fill(avgValue),
+        borderColor: 'rgba(255, 99, 132, 0.5)',
+        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+        borderWidth: 1,
+        borderDash: [5, 5],
+        fill: false,
+        pointRadius: 0,
+        yAxisID: 'y'
+      });
     }
-  }, [selectedData, currentConfig, labels, contractingValues, stateColors]);
+
+    // Add Viterbi path if selected
+    if (selectedDataSeries.includes('viterbi')) {
+      datasets.push({
+        label: 'Viterbi Path (Predicted)',
+        data: viterbiPath,
+        borderColor: 'rgb(153, 102, 255)',
+        backgroundColor: viterbiPath.map(state => stateColors[state]),
+        borderWidth: 3,
+        pointRadius: 6,
+        pointHoverRadius: 8,
+        tension: 0.1,
+        pointStyle: 'circle',
+        yAxisID: 'y1'
+      });
+    }
+
+    // Add observed states if selected
+    if (selectedDataSeries.includes('states')) {
+      datasets.push({
+        label: 'Observed States',
+        data: contractingStates,
+        borderColor: 'rgba(201, 203, 207, 0.9)',
+        backgroundColor: contractingStates.map(state => stateColors[state]),
+        borderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        tension: 0,
+        pointStyle: 'rect',
+        yAxisID: 'y1'
+      });
+    }
+
+    return {
+      labels,
+      datasets
+    };
+  }, [selectedDataSeries, contractingValues, viterbiPath, contractingStates, stateColors, labels]);
+
+  // Calculate Y-axis scale for contracting status
+  const getYAxisScale = () => {
+    if (contractingValues.length === 0) return {};
+    
+    const min = Math.min(...contractingValues);
+    const max = Math.max(...contractingValues);
+    const range = max - min;
+    const step = 10; // 10 MW intervals
+    
+    const minTick = Math.floor(min / step) * step;
+    const maxTick = Math.ceil(max / step) * step;
+    const numTicks = Math.min(10, Math.ceil((maxTick - minTick) / step));
+    
+    return {
+      min: minTick,
+      max: maxTick,
+      ticks: {
+        stepSize: step,
+        callback: function(value) {
+          return value + ' MW';
+        }
+      }
+    };
+  };
 
   const options = {
     responsive: true,
@@ -199,7 +198,7 @@ const AFRRInteractiveChart = ({
     plugins: {
       title: { 
         display: true, 
-        text: `${currentConfig.label} - ${title}`,
+        text: `${title} - Interactive Analysis`,
         font: { size: 16, weight: 'bold' }
       },
       legend: { 
@@ -225,11 +224,9 @@ const AFRRInteractiveChart = ({
           label: (context) => {
             const label = context.dataset.label || '';
             const value = context.parsed.y;
-            if (selectedData === 'contracting') {
+            if (selectedDataSeries.includes('contracting') && context.dataset.label.includes('Contracting')) {
               return `${label}: ${value.toFixed(2)} MW`;
-            } else if (selectedData === 'viterbi' || selectedData === 'states') {
-              return `${label}: ${stateNames[value] || value}`;
-            } else if (selectedData === 'comparison') {
+            } else if (selectedDataSeries.includes('viterbi') || selectedDataSeries.includes('states')) {
               return `${label}: ${stateNames[value] || value}`;
             }
             return `${label}: ${value}`;
@@ -239,19 +236,43 @@ const AFRRInteractiveChart = ({
     },
     scales: {
       y: { 
-        beginAtZero: selectedData === 'contracting',
+        type: 'linear',
+        display: selectedDataSeries.includes('contracting'),
+        position: 'left',
         title: { 
           display: true, 
-          text: currentConfig.yAxisLabel,
+          text: 'Contracting Status (MW)',
           font: { weight: 'bold' }
         },
+        ...getYAxisScale(),
         grid: {
-          color: 'rgba(0, 0, 0, 0.08)',
+          color: 'rgba(0, 0, 0, 0.05)',
           drawBorder: false,
-          lineWidth: 1
+          lineWidth: 0.5
         },
         ticks: {
           font: { size: 12 }
+        }
+      },
+      y1: {
+        type: 'linear',
+        display: selectedDataSeries.includes('viterbi') || selectedDataSeries.includes('states'),
+        position: 'right',
+        title: { 
+          display: true, 
+          text: 'State Category',
+          font: { weight: 'bold' }
+        },
+        min: 0.5,
+        max: 3.5,
+        ticks: {
+          stepSize: 1,
+          callback: function(value) {
+            return stateNames[value] || value;
+          }
+        },
+        grid: {
+          drawOnChartArea: false,
         }
       },
       x: { 
@@ -261,14 +282,30 @@ const AFRRInteractiveChart = ({
           font: { weight: 'bold' }
         },
         ticks: {
-          maxTicksLimit: 12,
+          maxTicksLimit: 15,
           maxRotation: 45,
-          font: { size: 11 }
+          font: { size: 11 },
+          callback: function(value, index, values) {
+            try {
+              const date = new Date(this.getLabelForValue(value));
+              if (isNaN(date.getTime())) {
+                return 'Invalid Date';
+              }
+              return date.toLocaleString('pl-PL', { 
+                month: 'short', 
+                day: 'numeric', 
+                hour: '2-digit', 
+                minute: '2-digit' 
+              });
+            } catch (error) {
+              return 'Invalid Date';
+            }
+          }
         },
         grid: {
-          color: 'rgba(0, 0, 0, 0.04)',
+          color: 'rgba(0, 0, 0, 0.03)',
           drawBorder: false,
-          lineWidth: 1
+          lineWidth: 0.5
         }
       }
     },
@@ -289,143 +326,124 @@ const AFRRInteractiveChart = ({
   };
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
+    <div className="w-full bg-white rounded-lg border border-gray-200 p-6">
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <BarChart3 className="h-5 w-5" />
-            aFRR Interactive Analysis
+            <BarChart3 className="h-5 w-5 text-blue-600" />
+            <h3 className="text-lg font-semibold text-gray-900">aFRR Interactive Analysis</h3>
           </div>
           <div className="flex items-center gap-2">
-            <Settings className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Controls</span>
+            <Settings className="h-4 w-4 text-gray-500" />
+            <span className="text-sm text-gray-500">Multi-Series Controls</span>
           </div>
-        </CardTitle>
-        <CardDescription>
-          Interactive aFRR market analysis with HMM state prediction. 
-          Viterbi path shows smoothed predictions, while Observed States show raw categorization.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Data Type Selector */}
+        </div>
+        <p className="text-sm text-gray-600">
+          Select multiple data series to display simultaneously. Viterbi path shows smoothed predictions, while Observed States show raw categorization.
+        </p>
+      </div>
+      
+      <div className="space-y-4">
+        {/* Multi-Series Selector */}
         <div className="flex flex-wrap gap-2">
           {Object.entries(chartOptions).map(([key, config]) => (
-            <Button
+            <button
               key={key}
-              variant={selectedData === key ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSelectedData(key)}
-              className="flex items-center gap-2"
+              onClick={() => toggleSeries(key)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                selectedDataSeries.includes(key)
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
             >
               {config.icon}
               {config.label}
-            </Button>
+              {selectedDataSeries.includes(key) && (
+                <span className="ml-1 text-xs">✓</span>
+              )}
+            </button>
           ))}
         </div>
 
-        {/* Chart Type Selector (for compatible data types) */}
-        {selectedData === 'contracting' && (
-          <div className="flex gap-2">
-            <Button
-              variant={chartType === 'line' ? "default" : "outline"}
-              size="sm"
-              onClick={() => setChartType('line')}
-            >
-              Line Chart
-            </Button>
-            <Button
-              variant={chartType === 'bar' ? "default" : "outline"}
-              size="sm"
-              onClick={() => setChartType('bar')}
-            >
-              Bar Chart
-            </Button>
-          </div>
-        )}
+        {/* Chart Type Selector */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setChartType('line')}
+            className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              chartType === 'line'
+                ? 'bg-green-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Line Chart
+          </button>
+          <button
+            onClick={() => setChartType('bar')}
+            className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              chartType === 'bar'
+                ? 'bg-green-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Bar Chart
+          </button>
+        </div>
 
         {/* Data Statistics */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted rounded-lg">
-          {selectedData === 'contracting' && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
+          {selectedDataSeries.includes('contracting') && (
             <>
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-600">
                   {contractingValues.length > 0 ? Math.min(...contractingValues).toFixed(0) : 'N/A'}
                 </div>
-                <div className="text-xs text-muted-foreground">Min Contracting</div>
+                <div className="text-xs text-gray-600">Min Contracting</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-green-600">
                   {contractingValues.length > 0 ? Math.max(...contractingValues).toFixed(0) : 'N/A'}
                 </div>
-                <div className="text-xs text-muted-foreground">Max Contracting</div>
+                <div className="text-xs text-gray-600">Max Contracting</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-purple-600">
                   {contractingValues.length > 0 ? (contractingValues.reduce((a, b) => a + b, 0) / contractingValues.length).toFixed(0) : 'N/A'}
                 </div>
-                <div className="text-xs text-muted-foreground">Avg Contracting</div>
+                <div className="text-xs text-gray-600">Avg Contracting</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-orange-600">
                   {contractingValues.length}
                 </div>
-                <div className="text-xs text-muted-foreground">Data Points</div>
+                <div className="text-xs text-gray-600">Data Points</div>
               </div>
             </>
           )}
-          {(selectedData === 'viterbi' || selectedData === 'states') && (
+          {(selectedDataSeries.includes('viterbi') || selectedDataSeries.includes('states')) && (
             <>
               <div className="text-center">
                 <div className="text-2xl font-bold text-red-600">
                   {viterbiPath.filter(s => s === 1).length}
                 </div>
-                <div className="text-xs text-muted-foreground">Undercontracted</div>
+                <div className="text-xs text-gray-600">Undercontracted</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-yellow-600">
                   {viterbiPath.filter(s => s === 2).length}
                 </div>
-                <div className="text-xs text-muted-foreground">Balanced</div>
+                <div className="text-xs text-gray-600">Balanced</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-green-600">
                   {viterbiPath.filter(s => s === 3).length}
                 </div>
-                <div className="text-xs text-muted-foreground">Overcontracted</div>
+                <div className="text-xs text-gray-600">Overcontracted</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-purple-600">
                   {viterbiPath.length}
                 </div>
-                <div className="text-xs text-muted-foreground">Total States</div>
-              </div>
-            </>
-          )}
-          {selectedData === 'comparison' && (
-            <>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">
-                  {viterbiPath.filter((v, i) => v === contractingStates[i]).length}
-                </div>
-                <div className="text-xs text-muted-foreground">Matching States</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">
-                  {((viterbiPath.filter((v, i) => v === contractingStates[i]).length / viterbiPath.length) * 100).toFixed(1)}%
-                </div>
-                <div className="text-xs text-muted-foreground">Prediction Accuracy</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-purple-600">
-                  {viterbiPath.length}
-                </div>
-                <div className="text-xs text-muted-foreground">Total Predictions</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-orange-600">
-                  {viterbiPath.filter((v, i) => v !== contractingStates[i]).length}
-                </div>
-                <div className="text-xs text-muted-foreground">Smoothing Events</div>
+                <div className="text-xs text-gray-600">Total States</div>
               </div>
             </>
           )}
@@ -433,7 +451,7 @@ const AFRRInteractiveChart = ({
 
         {/* Chart */}
         <div className="w-full h-[500px] relative">
-          {isBarChart ? (
+          {chartType === 'bar' ? (
             <Bar data={chartData} options={options} />
           ) : (
             <Line data={chartData} options={options} />
@@ -444,90 +462,86 @@ const AFRRInteractiveChart = ({
         {transitionMatrix.length > 0 && emissionMatrix.length > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
             {/* Transition Matrix */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Table className="h-5 w-5" />
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="mb-4">
+                <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4" />
                   HMM Transition Matrix
-                </CardTitle>
-                <CardDescription>
+                </h4>
+                <p className="text-sm text-gray-600">
                   Probability of transitioning between contracting states
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr>
-                        <th className="p-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-tl-lg"></th>
-                        <th className="p-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold">Under→</th>
-                        <th className="p-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold">Balanced→</th>
-                        <th className="p-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-tr-lg">Over→</th>
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="p-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-tl-lg"></th>
+                      <th className="p-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold">Under→</th>
+                      <th className="p-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold">Balanced→</th>
+                      <th className="p-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-tr-lg">Over→</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transitionMatrix.map((row, i) => (
+                      <tr key={i} className="even:bg-gray-50">
+                        <th className="p-2 font-semibold text-gray-700">
+                          {['Under', 'Balanced', 'Over'][i]}
+                        </th>
+                        {row.map((val, j) => (
+                          <td key={j} className="p-2 border border-gray-200 text-center">
+                            {val.toFixed(3)}
+                          </td>
+                        ))}
                       </tr>
-                    </thead>
-                    <tbody>
-                      {transitionMatrix.map((row, i) => (
-                        <tr key={i} className="even:bg-gray-50">
-                          <th className="p-2 font-semibold text-gray-700">
-                            {['Under', 'Balanced', 'Over'][i]}
-                          </th>
-                          {row.map((val, j) => (
-                            <td key={j} className="p-2 border border-gray-200 text-center">
-                              {val.toFixed(3)}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
             {/* Emission Matrix */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Table className="h-5 w-5" />
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="mb-4">
+                <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4" />
                   Emission Matrix
-                </CardTitle>
-                <CardDescription>
+                </h4>
+                <p className="text-sm text-gray-600">
                   Action probabilities for each contracting state
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr>
-                        <th className="p-2 bg-gradient-to-r from-green-500 to-blue-600 text-white font-semibold rounded-tl-lg"></th>
-                        <th className="p-2 bg-gradient-to-r from-green-500 to-blue-600 text-white font-semibold">Low</th>
-                        <th className="p-2 bg-gradient-to-r from-green-500 to-blue-600 text-white font-semibold">Medium</th>
-                        <th className="p-2 bg-gradient-to-r from-green-500 to-blue-600 text-white font-semibold rounded-tr-lg">High</th>
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="p-2 bg-gradient-to-r from-green-500 to-blue-600 text-white font-semibold rounded-tl-lg"></th>
+                      <th className="p-2 bg-gradient-to-r from-green-500 to-blue-600 text-white font-semibold">Low</th>
+                      <th className="p-2 bg-gradient-to-r from-green-500 to-blue-600 text-white font-semibold">Medium</th>
+                      <th className="p-2 bg-gradient-to-r from-green-500 to-blue-600 text-white font-semibold rounded-tr-lg">High</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {emissionMatrix.map((row, i) => (
+                      <tr key={i} className="even:bg-gray-50">
+                        <th className="p-2 font-semibold text-gray-700">
+                          {['Under', 'Balanced', 'Over'][i]}
+                        </th>
+                        {row.map((val, j) => (
+                          <td key={j} className="p-2 border border-gray-200 text-center">
+                            {val.toFixed(3)}
+                          </td>
+                        ))}
                       </tr>
-                    </thead>
-                    <tbody>
-                      {emissionMatrix.map((row, i) => (
-                        <tr key={i} className="even:bg-gray-50">
-                          <th className="p-2 font-semibold text-gray-700">
-                            {['Under', 'Balanced', 'Over'][i]}
-                          </th>
-                          {row.map((val, j) => (
-                            <td key={j} className="p-2 border border-gray-200 text-center">
-                              {val.toFixed(3)}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 };
 
