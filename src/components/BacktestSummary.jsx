@@ -20,6 +20,7 @@ import {
 import { formatCurrency, formatNumber, formatDate } from '../lib/utils'
 import { cn } from '../lib/utils'
 import { Line, Bar } from 'react-chartjs-2'
+import RevenueChart from './RevenueChart'
 
 const BacktestSummary = ({ backtestResults, onShowPeriodDetail }) => {
   const [sortField, setSortField] = useState('totalRevenue')
@@ -192,112 +193,8 @@ const BacktestSummary = ({ backtestResults, onShowPeriodDetail }) => {
           </CardContent>
         </Card>
 
-        {/* Revenue Trend Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              Revenue Trend
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Line
-              data={{
-                labels: results.map(r => {
-                  // Use actual timestamps if available, otherwise format period labels
-                  if (r.periodStart && r.periodEnd) {
-                    // Use the start of the period as the label
-                    try {
-                      const startDate = new Date(r.periodStart);
-                      if (!isNaN(startDate.getTime())) {
-                        return startDate.toLocaleDateString('pl-PL', { 
-                          month: 'short', 
-                          day: 'numeric',
-                          year: 'numeric'
-                        });
-                      }
-                    } catch (error) {
-                      console.error('Error parsing period start date:', error);
-                    }
-                  }
-                  
-                  // Fallback to period formatting
-                  if (r.period.includes('-')) {
-                    // Monthly format: "2024-06" -> "Jun 2024"
-                    const [year, month] = r.period.split('-');
-                    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
-                                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                    return `${monthNames[parseInt(month) - 1]} ${year}`;
-                  } else if (r.period.includes('Q')) {
-                    // Quarterly format: "2024-Q1" -> "Q1 2024"
-                    return r.period.replace('-', ' ');
-                  } else {
-                    // Yearly or other format
-                    return r.period;
-                  }
-                }),
-                datasets: [{
-                  label: 'Revenue (PLN)',
-                  data: results.map(r => r.totalRevenue),
-                  borderColor: '#667eea',
-                  backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                  pointBackgroundColor: results.map(r => r.totalRevenue > 0 ? '#27ae60' : '#e74c3c'),
-                  pointBorderColor: '#fff',
-                  pointBorderWidth: 2,
-                  pointRadius: 4,
-                  tension: 0.3,
-                  fill: true
-                }]
-              }}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                  legend: { display: false },
-                  tooltip: {
-                    callbacks: {
-                      title: (context) => {
-                        return `Period: ${context[0].label}`;
-                      },
-                      label: (context) => {
-                        const result = results[context.dataIndex];
-                        return [
-                          `Revenue: ${formatCurrency(context.parsed.y)}`,
-                          `Energy: ${formatNumber(result.totalEnergyDischarged)} MWh`,
-                          `Data Points: ${result.dataPoints}`
-                        ];
-                      }
-                    }
-                  }
-                },
-                scales: {
-                  y: { 
-                    title: { display: true, text: 'Revenue (PLN)' },
-                    beginAtZero: false, // Don't force zero to avoid compression
-                    grid: {
-                      color: 'rgba(0, 0, 0, 0.05)',
-                      drawBorder: false,
-                      lineWidth: 0.5
-                    },
-                    ticks: {
-                      callback: function(value) {
-                        return formatCurrency(value);
-                      }
-                    }
-                  },
-                  x: { 
-                    title: { display: true, text: 'Period' },
-                    grid: {
-                      color: 'rgba(0, 0, 0, 0.03)',
-                      drawBorder: false,
-                      lineWidth: 0.5
-                    }
-                  }
-                }
-              }}
-            />
-          </CardContent>
-        </Card>
+        {/* New Revenue Chart */}
+        <RevenueChart results={results} />
       </div>
 
       {/* Warnings Display */}

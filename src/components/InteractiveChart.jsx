@@ -259,13 +259,24 @@ const InteractiveChart = ({
         display: selectedDataSeries.includes('prices'),
         position: 'left',
         title: { display: true, text: 'Price (PLN/MWh)' },
+        beginAtZero: false, // Don't force zero to avoid compression
         grid: {
           color: 'rgba(0, 0, 0, 0.05)',
           drawBorder: false,
           lineWidth: 0.5
         },
         ticks: {
-          font: { size: 12 }
+          font: { size: 12 },
+          callback: function(value) {
+            return value.toLocaleString('pl-PL') + ' PLN/MWh';
+          }
+        },
+        // Dynamic scaling to prevent compression
+        afterDataLimits: (axis) => {
+          const range = axis.max - axis.min;
+          const padding = range * 0.1; // 10% padding
+          axis.min = axis.min - padding;
+          axis.max = axis.max + padding;
         }
       },
       y1: {
@@ -273,12 +284,19 @@ const InteractiveChart = ({
         display: selectedDataSeries.includes('soc'),
         position: 'right',
         title: { display: true, text: 'Energy (MWh)' },
-        beginAtZero: true,
+        beginAtZero: false, // Don't force zero to avoid compression
         grid: {
           drawOnChartArea: false,
         },
         ticks: {
           font: { size: 12 }
+        },
+        // Dynamic scaling to prevent compression
+        afterDataLimits: (axis) => {
+          const range = axis.max - axis.min;
+          const padding = range * 0.1; // 10% padding
+          axis.min = axis.min - padding;
+          axis.max = axis.max + padding;
         }
       },
       y2: {
@@ -286,11 +304,19 @@ const InteractiveChart = ({
         display: selectedDataSeries.includes('power'),
         position: 'right',
         title: { display: true, text: 'Power (MW)' },
+        beginAtZero: false, // Don't force zero to avoid compression
         grid: {
           drawOnChartArea: false,
         },
         ticks: {
           font: { size: 12 }
+        },
+        // Dynamic scaling to prevent compression
+        afterDataLimits: (axis) => {
+          const range = axis.max - axis.min;
+          const padding = range * 0.1; // 10% padding
+          axis.min = axis.min - padding;
+          axis.max = axis.max + padding;
         }
       },
       y3: {
@@ -307,6 +333,13 @@ const InteractiveChart = ({
           callback: function(value) {
             return value.toLocaleString('pl-PL') + ' PLN';
           }
+        },
+        // Dynamic scaling to prevent compression
+        afterDataLimits: (axis) => {
+          const range = axis.max - axis.min;
+          const padding = range * 0.1; // 10% padding
+          axis.min = axis.min - padding;
+          axis.max = axis.max + padding;
         }
       },
       x: { 

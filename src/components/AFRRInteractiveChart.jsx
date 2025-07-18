@@ -272,6 +272,7 @@ const AFRRInteractiveChart = ({
           text: 'Contracting Status (MW)',
           font: { weight: 'bold' }
         },
+        beginAtZero: false, // Don't force zero to avoid compression
         ...getYAxisScale(),
         grid: {
           color: 'rgba(0, 0, 0, 0.05)',
@@ -280,6 +281,13 @@ const AFRRInteractiveChart = ({
         },
         ticks: {
           font: { size: 12 }
+        },
+        // Dynamic scaling to prevent compression
+        afterDataLimits: (axis) => {
+          const range = axis.max - axis.min;
+          const padding = range * 0.1; // 10% padding
+          axis.min = axis.min - padding;
+          axis.max = axis.max + padding;
         }
       },
       y1: {

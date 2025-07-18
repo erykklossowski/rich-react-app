@@ -50,7 +50,17 @@ export const PriceChart = ({ data, priceCategories, title, timestamps = null }) 
             legend: { display: true }
         },
         scales: {
-            y: { beginAtZero: false, title: { display: true, text: 'Price (PLN/MWh)' } },
+            y: { 
+        beginAtZero: false, 
+        title: { display: true, text: 'Price (PLN/MWh)' },
+        // Dynamic scaling to prevent compression
+        afterDataLimits: (axis) => {
+          const range = axis.max - axis.min;
+          const padding = range * 0.1; // 10% padding
+          axis.min = axis.min - padding;
+          axis.max = axis.max + padding;
+        }
+      },
             x: { 
                 title: { display: true, text: timestamps ? 'Date & Time' : 'Time Period' },
                 ticks: {
@@ -214,7 +224,17 @@ export const RevenueChart = ({ data, title, timestamps = null }) => {
             legend: { display: true }
         },
         scales: {
-            y: { title: { display: true, text: 'Revenue (PLN)' } },
+            y: { 
+        title: { display: true, text: 'Revenue (PLN)' },
+        beginAtZero: false, // Don't force zero to avoid compression
+        // Dynamic scaling to prevent compression
+        afterDataLimits: (axis) => {
+          const range = axis.max - axis.min;
+          const padding = range * 0.1; // 10% padding
+          axis.min = axis.min - padding;
+          axis.max = axis.max + padding;
+        }
+      },
             x: { 
                 title: { display: true, text: timestamps ? 'Date & Time' : 'Time Period' },
                 ticks: {
