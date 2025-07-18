@@ -10,7 +10,17 @@
     "preview": "vite preview",
     "server": "node server.js",
     "dev:full": "concurrently \"npm run server\" \"npm run dev\"",
-    "setup": "node setup.js"
+    "setup": "node setup.js",
+    "start": "node server.js",
+    "test": "echo \"No unit tests specified\" && exit 0",
+    "test:deterministic": "node test-deterministic-optimization.js",
+    "test:parameters": "node test-parameter-consistency.js",
+    "test:errors": "node test-error-handling.js",
+    "test:all": "node test-runner.js",
+    "test:ci": "npm run test:all",
+    "ci:test": "npm run test:all",
+    "ci:build": "npm run build",
+    "ci:lint": "npm run lint"
   },
   "dependencies": {
     "chart.js": "^4.4.7",

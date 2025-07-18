@@ -605,56 +605,109 @@ class BatteryOptimizer {
         const recombination = 0.7; // Recombination rate
         const maxiter = Math.min(50, Math.max(25, T * 1.5)); // Reduced max generations
         
-        // Bias initial population using Viterbi path guidance
-        const viterbiLowIndices = [];
-        const viterbiHighIndices = [];
+        // Viterbi path seeding: Create deterministic initial population based on Viterbi path
+        const population = [];
         
         if (viterbiPath && viterbiPath.length > 0) {
-            // Use Viterbi path to identify low and high price periods
-            for (let t = 0; t < T; t++) {
-                if (viterbiPath[t] === 1) { // Predicted low price
-                    viterbiLowIndices.push(t);
-                } else if (viterbiPath[t] === 3) { // Predicted high price
-                    viterbiHighIndices.push(t);
-                }
-            }
-        }
-        
-        // Fallback to price-based sorting if Viterbi path is not available
-        const sortedIndices = prices.map((p, i) => [p, i]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
-        const lowIndices = viterbiLowIndices.length > 0 ? viterbiLowIndices : sortedIndices.slice(0, Math.floor(T / 3));
-        const highIndices = viterbiHighIndices.length > 0 ? viterbiHighIndices : sortedIndices.slice(-Math.floor(T / 3));
-
-        // Initialize population
-        const population = [];
-        for (let i = 0; i < popsize; i++) {
-            const individual = [];
-            for (let t = 0; t < T; t++) {
-                let charge = 0;
-                let discharge = 0;
-                if (i < popsize * 0.7) { // 70% of population is biased
-                    if (lowIndices.includes(t)) {
-                        charge = Math.random() * params.pMax;
+            console.log('Using Viterbi path seeding for deterministic optimization');
+            
+            // Create deterministic seed based on Viterbi path
+            const viterbiSeed = this.createViterbiSeed(viterbiPath, T, params.pMax);
+            
+            // Initialize population with Viterbi-guided individuals
+            for (let i = 0; i < popsize; i++) {
+                const individual = [];
+                
+                if (i === 0) {
+                    // First individual: Pure Viterbi path guidance
+                    individual.push(...viterbiSeed);
+                } else if (i < popsize * 0.8) {
+                    // 80% of population: Viterbi-guided with small random variations
+                    for (let t = 0; t < T; t++) {
+                        const baseCharge = viterbiSeed[t * 2];
+                        const baseDischarge = viterbiSeed[t * 2 + 1];
+                        
+                        // Add small deterministic variation based on index
+                        const variation = (i * 0.1) % 0.3; // Deterministic variation
+                        let charge = baseCharge * (1 + variation);
+                        let discharge = baseDischarge * (1 + variation);
+                        
+                        // Ensure bounds
+                        charge = Math.max(0, Math.min(params.pMax, charge));
+                        discharge = Math.max(0, Math.min(params.pMax, discharge));
+                        
+                        // Enforce hard constraint
+                        if (charge > 0 && discharge > 0) {
+                            if (charge > discharge) {
+                                discharge = 0;
+                            } else {
+                                charge = 0;
+                            }
+                        }
+                        
+                        individual.push(charge);
+                        individual.push(discharge);
                     }
-                    if (highIndices.includes(t)) {
+                } else {
+                    // 20% of population: Random exploration
+                    for (let t = 0; t < T; t++) {
+                        let charge = Math.random() * params.pMax;
+                        let discharge = Math.random() * params.pMax;
+                        
+                        // Enforce hard constraint
+                        if (charge > 0 && discharge > 0) {
+                            if (charge > discharge) {
+                                discharge = 0;
+                            } else {
+                                charge = 0;
+                            }
+                        }
+                        
+                        individual.push(charge);
+                        individual.push(discharge);
+                    }
+                }
+                
+                population.push(individual);
+            }
+        } else {
+            // Fallback to original initialization if no Viterbi path
+            console.log('No Viterbi path available, using fallback initialization');
+            
+            // Use price-based sorting for low and high periods
+            const sortedIndices = prices.map((p, i) => [p, i]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
+            const lowIndices = sortedIndices.slice(0, Math.floor(T / 3));
+            const highIndices = sortedIndices.slice(-Math.floor(T / 3));
+            
+            for (let i = 0; i < popsize; i++) {
+                const individual = [];
+                for (let t = 0; t < T; t++) {
+                    let charge = 0;
+                    let discharge = 0;
+                    if (i < popsize * 0.7) { // 70% of population is biased
+                        if (lowIndices.includes(t)) {
+                            charge = Math.random() * params.pMax;
+                        }
+                        if (highIndices.includes(t)) {
+                            discharge = Math.random() * params.pMax;
+                        }
+                    } else { // 30% is random
+                        charge = Math.random() * params.pMax;
                         discharge = Math.random() * params.pMax;
                     }
-                } else { // 30% is random
-                    charge = Math.random() * params.pMax;
-                    discharge = Math.random() * params.pMax;
-                }
-                // Enforce hard constraint in initial population
-                if (charge > 0 && discharge > 0) {
-                    if (charge > discharge) {
-                        discharge = 0;
-                    } else {
-                        charge = 0;
+                    // Enforce hard constraint in initial population
+                    if (charge > 0 && discharge > 0) {
+                        if (charge > discharge) {
+                            discharge = 0;
+                        } else {
+                            charge = 0;
+                        }
                     }
+                    individual.push(charge);
+                    individual.push(discharge);
                 }
-                individual.push(charge);
-                individual.push(discharge);
+                population.push(individual);
             }
-            population.push(individual);
         }
 
         let bestSolution = null;
@@ -1458,6 +1511,49 @@ class BatteryOptimizer {
                 error: error.message
             };
         }
+    }
+
+    // Create deterministic seed based on Viterbi path
+    createViterbiSeed(viterbiPath, T, pMax) {
+        const seed = [];
+        
+        for (let t = 0; t < T; t++) {
+            const category = viterbiPath[t];
+            let charge = 0;
+            let discharge = 0;
+            
+            switch (category) {
+                case 1: // Low price category - charge
+                    charge = pMax * 0.8; // Charge at 80% of max power
+                    discharge = 0;
+                    break;
+                case 2: // Medium price category - idle or small actions
+                    charge = pMax * 0.1; // Small charge
+                    discharge = pMax * 0.1; // Small discharge
+                    break;
+                case 3: // High price category - discharge
+                    charge = 0;
+                    discharge = pMax * 0.8; // Discharge at 80% of max power
+                    break;
+                default:
+                    charge = 0;
+                    discharge = 0;
+            }
+            
+            // Enforce hard constraint
+            if (charge > 0 && discharge > 0) {
+                if (charge > discharge) {
+                    discharge = 0;
+                } else {
+                    charge = 0;
+                }
+            }
+            
+            seed.push(charge);
+            seed.push(discharge);
+        }
+        
+        return seed;
     }
 }
 
