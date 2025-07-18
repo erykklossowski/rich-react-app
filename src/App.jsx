@@ -63,7 +63,8 @@ const App = () => {
     setDetailedPeriod,
     setLlmInsight,
     setLlmLoading,
-    resetResults
+    resetResults,
+    generateDebugInfo
   } = useOptimizationStore()
 
   // Load initial data
@@ -683,10 +684,17 @@ Based on these metrics, what are the key takeaways? Suggest 1-3 actionable strat
               </button>
               <button
                 onClick={testDifferentialEvolution}
-                className="amiga-tab w-full"
+                className="amiga-tab w-full mb-2"
               >
                 <TrendingUp className="h-3 w-3 inline mr-1" />
                 Test Diff Evolution
+              </button>
+              <button
+                onClick={generateDebugInfo}
+                className="amiga-tab w-full"
+              >
+                <AlertCircle className="h-3 w-3 inline mr-1" />
+                🔍 Debug Data
               </button>
             </div>
           </div>

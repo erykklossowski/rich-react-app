@@ -106,9 +106,18 @@ const AFRRVisualization = () => {
         if (!data || !data.contractingValues) return null;
 
         const labels = data.timestamps.map((timestamp, index) => {
-            const date = new Date(timestamp);
-            // Show date and time for better readability
-            return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+            try {
+                const date = new Date(timestamp);
+                if (isNaN(date.getTime())) {
+                    console.error('Invalid date:', timestamp);
+                    return `Invalid-${index}`;
+                }
+                // Show date and time for better readability
+                return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+            } catch (error) {
+                console.error('Date parsing error:', error, 'timestamp:', timestamp);
+                return `Error-${index}`;
+            }
         });
 
         const contractingValues = data.contractingValues;
@@ -145,9 +154,18 @@ const AFRRVisualization = () => {
         if (!data || !analysis || !analysis.success) return null;
 
         const labels = data.timestamps.map((timestamp, index) => {
-            const date = new Date(timestamp);
-            // Show date and time for better readability
-            return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+            try {
+                const date = new Date(timestamp);
+                if (isNaN(date.getTime())) {
+                    console.error('Invalid date:', timestamp);
+                    return `Invalid-${index}`;
+                }
+                // Show date and time for better readability
+                return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+            } catch (error) {
+                console.error('Date parsing error:', error, 'timestamp:', timestamp);
+                return `Error-${index}`;
+            }
         });
 
         const stateColors = {
