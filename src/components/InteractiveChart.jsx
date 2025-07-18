@@ -73,7 +73,21 @@ const InteractiveChart = ({
           const date = new Date(ts);
           if (isNaN(date.getTime())) {
             console.error('Invalid date:', ts);
-            return `Invalid-${index}`;
+            // Try to extract date from string if it's in a known format
+            if (typeof ts === 'string') {
+              const match = ts.match(/(\d{4}-\d{2}-\d{2})/);
+              if (match) {
+                const extractedDate = new Date(match[1]);
+                if (!isNaN(extractedDate.getTime())) {
+                  return extractedDate.toLocaleDateString('pl-PL', { 
+                    month: 'short', 
+                    day: 'numeric',
+                    year: 'numeric'
+                  });
+                }
+              }
+            }
+            return `Period ${index + 1}`;
           }
           return date.toLocaleString('pl-PL', { 
             month: 'short', 
@@ -83,7 +97,7 @@ const InteractiveChart = ({
           });
         } catch (error) {
           console.error('Date parsing error:', error, 'timestamp:', ts);
-          return `Error-${index}`;
+          return `Period ${index + 1}`;
         }
       });
     }
@@ -351,24 +365,35 @@ const InteractiveChart = ({
       
       <div className="space-y-4">
         {/* Multi-Series Selector */}
-        <div className="flex flex-wrap gap-2">
-          {Object.entries(chartOptions).map(([key, config]) => (
-            <button
-              key={key}
-              onClick={() => toggleSeries(key)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                selectedDataSeries.includes(key)
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {config.icon}
-              {config.label}
-              {selectedDataSeries.includes(key) && (
-                <span className="ml-1 text-xs">✓</span>
-              )}
-            </button>
-          ))}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">Select Data Series:</span>
+            <span className="text-xs text-gray-500">({selectedDataSeries.length} selected)</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(chartOptions).map(([key, config]) => (
+              <button
+                key={key}
+                onClick={() => toggleSeries(key)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  selectedDataSeries.includes(key)
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {config.icon}
+                {config.label}
+                {selectedDataSeries.includes(key) && (
+                  <span className="ml-1 text-xs">✓</span>
+                )}
+              </button>
+            ))}
+          </div>
+          {selectedDataSeries.length === 0 && (
+            <div className="text-sm text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200">
+              ⚠️ No data series selected. Please select at least one series to display data.
+            </div>
+          )}
         </div>
 
         {/* Chart Type Selector */}

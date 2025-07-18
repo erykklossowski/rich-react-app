@@ -202,7 +202,24 @@ const BacktestSummary = ({ backtestResults, onShowPeriodDetail }) => {
             <Line
               data={{
                 labels: results.map(r => {
-                  // Format period labels properly
+                  // Use actual timestamps if available, otherwise format period labels
+                  if (r.periodStart && r.periodEnd) {
+                    // Use the start of the period as the label
+                    try {
+                      const startDate = new Date(r.periodStart);
+                      if (!isNaN(startDate.getTime())) {
+                        return startDate.toLocaleDateString('pl-PL', { 
+                          month: 'short', 
+                          day: 'numeric',
+                          year: 'numeric'
+                        });
+                      }
+                    } catch (error) {
+                      console.error('Error parsing period start date:', error);
+                    }
+                  }
+                  
+                  // Fallback to period formatting
                   if (r.period.includes('-')) {
                     // Monthly format: "2024-06" -> "Jun 2024"
                     const [year, month] = r.period.split('-');
