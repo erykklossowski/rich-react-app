@@ -4,6 +4,8 @@ import fetch from 'node-fetch';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import BatteryOptimizer from './src/utils/BatteryOptimizerClass.js';
+import AFRRHMMModel from './src/utils/afrrHMMModel.js';
+import { loadComprehensiveMarketData, extractContractingValues, getContractingStatistics } from './src/utils/afrrDataLoaders.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -34,7 +36,12 @@ const MOCK_DATA = MOCK_PRICES.map((price, index) => ({
 }));
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://rich-react-app-frontend.onrender.com', 'http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002']
+    : true,
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'dist')));
 
@@ -234,6 +241,116 @@ app.post('/api/backtest', async (req, res) => {
     console.error('Backtest error:', error);
     res.status(500).json({ 
       error: 'Backtest failed: ' + error.message 
+    });
+  }
+});
+
+// aFRR Data API endpoint
+app.post('/api/afrr/data', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.body;
+
+    console.log('aFRR data request received:', { startDate, endDate });
+
+    const marketData = await loadComprehensiveMarketData({ startDate, endDate });
+    
+    res.json(marketData);
+
+  } catch (error) {
+    console.error('aFRR data error:', error);
+    res.status(500).json({ 
+      error: 'Failed to load aFRR data: ' + error.message 
+    });
+  }
+});
+
+// aFRR Analysis API endpoint
+app.post('/api/afrr/analyze', async (req, res) => {
+  try {
+    const { contractingValues, options = {} } = req.body;
+
+    console.log('aFRR analysis request received:', { 
+      dataPoints: contractingValues.length,
+      options 
+    });
+
+    const hmmModel = new AFRRHMMModel();
+    const analysisResult = hmmModel.analyze(contractingValues, options.categorizationMethod || 'quantile');
+    
+    res.json(analysisResult);
+
+  } catch (error) {
+    console.error('aFRR analysis error:', error);
+    res.status(500).json({ 
+      error: 'Failed to analyze aFRR data: ' + error.message 
+    });
+  }
+});
+
+// aFRR Backtest API endpoint
+app.post('/api/afrr/backtest', async (req, res) => {
+  try {
+    const { startDate, endDate, parameters = {} } = req.body;
+
+    console.log('aFRR backtest request received:', { startDate, endDate, parameters });
+
+    // Load market data
+    const marketData = await loadComprehensiveMarketData({ startDate, endDate });
+    
+    // Extract contracting values
+    const { contractingValues } = extractContractingValues(marketData.data);
+    
+    // Run HMM analysis
+    const hmmModel = new AFRRHMMModel();
+    const analysisResult = hmmModel.analyze(contractingValues, 'quantile');
+    
+    if (!analysisResult.success) {
+      throw new Error(analysisResult.error);
+    }
+
+    // Calculate statistics
+    const statistics = getContractingStatistics(contractingValues);
+    
+    const response = {
+      success: true,
+      analysis: analysisResult,
+      statistics,
+      dataPoints: contractingValues.length,
+      dateRange: `${startDate} to ${endDate}`
+    };
+
+    res.json(response);
+
+  } catch (error) {
+    console.error('aFRR backtest error:', error);
+    res.status(500).json({ 
+      error: 'Failed to run aFRR backtest: ' + error.message 
+    });
+  }
+});
+
+// aFRR Statistics API endpoint
+app.post('/api/afrr/statistics', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.body;
+
+    console.log('aFRR statistics request received:', { startDate, endDate });
+
+    const marketData = await loadComprehensiveMarketData({ startDate, endDate });
+    const { contractingValues } = extractContractingValues(marketData.data);
+    const statistics = getContractingStatistics(contractingValues);
+    
+    res.json({
+      success: true,
+      statistics,
+      dataPoints: contractingValues.length,
+      dateRange: `${startDate} to ${endDate}`
+    });
+
+  } catch (error) {
+    console.error('aFRR statistics error:', error);
+    res.status(500).json({ 
+      error: 'Failed to get aFRR statistics: ' + error.message 
     });
   }
 });

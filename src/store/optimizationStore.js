@@ -33,7 +33,8 @@ const useOptimizationStore = create((set, get) => ({
     set({ isRunning: true, error: null });
 
     try {
-      const response = await fetch('/api/backtest', {
+      const apiUrl = import.meta.env.VITE_API_URL || '';
+      const response = await fetch(`${apiUrl}/api/backtest`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
