@@ -10,7 +10,7 @@ import ResultsDashboard from './components/ResultsDashboard'
 import BacktestSummary from './components/BacktestSummary'
 import AFRRVisualization from './components/AFRRVisualization'
 import BatteryOptimizer from './utils/BatteryOptimizerClass.js'
-import { loadPolishData, loadDayAheadPriceData, filterDataByDateRange, groupDataByPeriod } from './utils/dataLoaders.js'
+import { loadPolishData, loadCSDACPLNData, filterDataByDateRange, groupDataByPeriod } from './utils/dataLoaders.js'
 import { Battery, TrendingUp, AlertCircle, CheckCircle, Info, Zap } from 'lucide-react'
 import { cn } from './lib/utils'
 
@@ -71,8 +71,8 @@ const App = () => {
     const fetchInitialData = async () => {
       try {
         // Load day-ahead price data (CSDAC PLN) instead of Poland.csv
-        const data = await loadDayAheadPriceData({ lookbackDays: 30, maxRecords: 1000 })
-        setPolishData(data.data)
+        const data = await loadCSDACPLNData()
+        setPolishData(data)
         console.log('Day-ahead price data (CSDAC PLN) preloaded successfully')
       } catch (error) {
         console.log('Could not preload day-ahead price data - will load when needed')
@@ -187,8 +187,8 @@ const App = () => {
       optimizer.reset()
       
       // Load a small sample of real data
-      const data = await loadDayAheadPriceData({ lookbackDays: 2, maxRecords: 48 })
-      const sampleData = data.data.slice(0, 48) // Get 48 hours (2 days)
+      const data = await loadCSDACPLNData()
+      const sampleData = data.slice(0, 48) // Get 48 hours (2 days)
       const prices = sampleData.map(record => record.csdac_pln)
       
       console.log('Testing optimizer with real data format:')
