@@ -350,7 +350,35 @@ const App = () => {
       setProgressText(`Analyzing ${groupKeys.length} periods...`)
       setProgress(60)
 
+      // Data completeness validation function
+      const validateDataCompleteness = (data, periodType = 'monthly') => {
+        if (!data || data.length === 0) return { isValid: false, completeness: 0, reason: 'No data' };
+        
+        const hoursInPeriod = {
+          'daily': 24,
+          'weekly': 24 * 7,
+          'monthly': 24 * 30, // Approximate
+          'yearly': 24 * 365
+        };
+        
+        const expectedHours = hoursInPeriod[periodType] || 24 * 30;
+        const actualHours = data.length;
+        const completeness = actualHours / expectedHours;
+        
+        // Consider data complete if it has at least 90% of expected hours
+        const isValid = completeness >= 0.9;
+        
+        return {
+          isValid,
+          completeness,
+          actualHours,
+          expectedHours,
+          reason: isValid ? 'Complete' : `Incomplete: ${(completeness * 100).toFixed(1)}% (${actualHours}/${expectedHours} hours)`
+        };
+      };
+
       const results = []
+      const warnings = []
 
       for (const [index, key] of groupKeys.entries()) {
         const groupData = groups[key]
@@ -359,6 +387,16 @@ const App = () => {
         console.log(`Processing period ${key}: ${prices.length} data points`)
         console.log(`Price range: ${Math.min(...prices)} - ${Math.max(...prices)}`)
         console.log(`Sample prices:`, prices.slice(0, 5))
+
+        // Validate data completeness
+        const completeness = validateDataCompleteness(groupData, analysisType);
+        
+        if (!completeness.isValid) {
+          console.warn(`⚠️  Period ${key}: ${completeness.reason}`);
+          warnings.push(`${key}: ${completeness.reason}`);
+          // Skip incomplete periods instead of showing zero revenue
+          continue;
+        }
 
         if (prices.length >= 24) {
           console.log(`Attempting optimization for period ${key} with ${prices.length} data points`)
@@ -474,6 +512,7 @@ const App = () => {
 
       setBacktestResults({
         results,
+        warnings,
         analysisType,
         dateRange: { start: startDate, end: endDate },
         params,

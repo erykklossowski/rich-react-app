@@ -722,6 +722,291 @@ export const useOptimizationStore = create(
           })
           throw error
         }
+      },
+      // Comprehensive debug function to trace data path and identify compression issues
+      generateDataPathDebug: async () => {
+        const state = get()
+        
+        try {
+          console.log('=== COMPREHENSIVE DATA PATH DEBUG ===')
+          console.log(`Generated at: ${new Date().toISOString()}`)
+          
+          // Import all necessary modules
+          const { loadCSDACPLNData, loadPolishData, groupDataByPeriod, filterDataByDateRange } = await import('../utils/dataLoaders.js')
+          const { getDataConfig } = await import('../utils/dataConfig.js')
+          
+          const debugReport = {
+            timestamp: new Date().toISOString(),
+            dataPath: {},
+            issues: [],
+            recommendations: []
+          }
+          
+          // STEP 1: RAW DATA ANALYSIS
+          console.log('\n1. RAW DATA ANALYSIS')
+          console.log('='.repeat(50))
+          
+          const rawData = await loadCSDACPLNData()
+          debugReport.dataPath.rawData = {
+            totalRecords: rawData.length,
+            dateRange: {
+              start: rawData[0]?.dtime,
+              end: rawData[rawData.length - 1]?.dtime
+            },
+            sampleRecords: rawData.slice(0, 3)
+          }
+          
+          console.log(`✅ Raw CSDAC data: ${rawData.length.toLocaleString()} records`)
+          console.log(`📅 Date range: ${debugReport.dataPath.rawData.dateRange.start} to ${debugReport.dataPath.rawData.dateRange.end}`)
+          
+          // STEP 2: AGGREGATED DATA ANALYSIS
+          console.log('\n2. AGGREGATED DATA ANALYSIS')
+          console.log('='.repeat(50))
+          
+          const aggregatedData = await loadPolishData()
+          debugReport.dataPath.aggregatedData = {
+            totalRecords: aggregatedData.length,
+            dateRange: {
+              start: aggregatedData[0]?.datetime,
+              end: aggregatedData[aggregatedData.length - 1]?.datetime
+            },
+            sampleRecords: aggregatedData.slice(0, 3)
+          }
+          
+          console.log(`✅ Aggregated data: ${aggregatedData.length.toLocaleString()} records`)
+          console.log(`📅 Date range: ${debugReport.dataPath.aggregatedData.dateRange.start} to ${debugReport.dataPath.aggregatedData.dateRange.end}`)
+          
+          // STEP 3: DATE RANGE FILTERING ANALYSIS
+          console.log('\n3. DATE RANGE FILTERING ANALYSIS')
+          console.log('='.repeat(50))
+          
+          const config = await getDataConfig()
+          const currentStartDate = state.startDate || config.dataStartDate
+          const currentEndDate = state.endDate || config.dataEndDate
+          
+          console.log(`🔍 Current date range: ${currentStartDate} to ${currentEndDate}`)
+          
+          const filteredData = filterDataByDateRange(aggregatedData, currentStartDate, currentEndDate)
+          debugReport.dataPath.filteredData = {
+            totalRecords: filteredData.length,
+            dateRange: {
+              start: filteredData[0]?.datetime,
+              end: filteredData[filteredData.length - 1]?.datetime
+            },
+            sampleRecords: filteredData.slice(0, 3)
+          }
+          
+          console.log(`✅ Filtered data: ${filteredData.length.toLocaleString()} records`)
+          console.log(`📅 Filtered range: ${debugReport.dataPath.filteredData.dateRange.start} to ${debugReport.dataPath.filteredData.dateRange.end}`)
+          
+          // STEP 4: MONTHLY GROUPING ANALYSIS
+          console.log('\n4. MONTHLY GROUPING ANALYSIS')
+          console.log('='.repeat(50))
+          
+          const monthlyGroups = groupDataByPeriod(filteredData, 'monthly')
+          const monthKeys = Object.keys(monthlyGroups).sort()
+          
+          debugReport.dataPath.monthlyGroups = {
+            totalMonths: monthKeys.length,
+            monthDetails: {}
+          }
+          
+          console.log(`📅 Found ${monthKeys.length} months: ${monthKeys.join(', ')}`)
+          
+          // Analyze each month in detail
+          for (const monthKey of monthKeys) {
+            const monthData = monthlyGroups[monthKey]
+            const prices = monthData.map(record => record.price || record.csdac_pln)
+            const timestamps = monthData.map(record => record.datetime || record.dtime)
+            
+            const monthDays = monthData.length / 24
+            const expectedDays = new Date(new Date(monthData[0].datetime).getFullYear(), new Date(monthData[0].datetime).getMonth() + 1, 0).getDate()
+            const completeness = monthDays / expectedDays
+            
+            debugReport.dataPath.monthlyGroups.monthDetails[monthKey] = {
+              records: monthData.length,
+              days: monthDays,
+              expectedDays: expectedDays,
+              completeness: completeness,
+              priceStats: {
+                min: Math.min(...prices),
+                max: Math.max(...prices),
+                avg: prices.reduce((a, b) => a + b, 0) / prices.length
+              },
+              dateRange: {
+                start: monthData[0]?.datetime,
+                end: monthData[monthData.length - 1]?.datetime
+              },
+              sampleTimestamps: timestamps.slice(0, 3)
+            }
+            
+            console.log(`\n📊 ${monthKey}:`)
+            console.log(`  Records: ${monthData.length}, Days: ${monthDays.toFixed(1)}/${expectedDays} (${(completeness * 100).toFixed(1)}% complete)`)
+            console.log(`  Price range: ${Math.min(...prices).toFixed(2)} - ${Math.max(...prices).toFixed(2)} PLN/MWh`)
+            console.log(`  Date range: ${monthData[0]?.datetime} to ${monthData[monthData.length - 1]?.datetime}`)
+            console.log(`  Sample timestamps:`, timestamps.slice(0, 3))
+            
+            // Check for data compression issues
+            if (monthData.length < 24 * 28) { // Less than 28 days
+              debugReport.issues.push(`${monthKey}: Insufficient data (${monthData.length} records, expected ~${24 * 30})`)
+              console.log(`  ⚠️  INSUFFICIENT DATA DETECTED`)
+            }
+            
+            // Check for invalid timestamps
+            const invalidTimestamps = timestamps.filter(ts => !ts || isNaN(new Date(ts).getTime()))
+            if (invalidTimestamps.length > 0) {
+              debugReport.issues.push(`${monthKey}: ${invalidTimestamps.length} invalid timestamps`)
+              console.log(`  ⚠️  Found ${invalidTimestamps.length} invalid timestamps`)
+            }
+          }
+          
+          // STEP 5: OPTIMIZATION RESULTS ANALYSIS
+          console.log('\n5. OPTIMIZATION RESULTS ANALYSIS')
+          console.log('='.repeat(50))
+          
+          if (state.backtestResults) {
+            const results = state.backtestResults.results || []
+            console.log(`📊 Frontend results: ${results.length} periods`)
+            
+            debugReport.dataPath.frontendResults = {
+              totalResults: results.length,
+              resultDetails: results.map(r => ({
+                period: r.period,
+                revenue: r.totalRevenue,
+                dataPoints: r.dataPoints,
+                periodStart: r.periodStart,
+                periodEnd: r.periodEnd
+              }))
+            }
+            
+            console.log(`Frontend periods: ${results.map(r => r.period).join(', ')}`)
+            
+            // Compare backend vs frontend
+            const backendMonths = new Set(monthKeys)
+            const frontendMonths = new Set(results.map(r => r.period))
+            
+            const missingInFrontend = [...backendMonths].filter(m => !frontendMonths.has(m))
+            const extraInFrontend = [...frontendMonths].filter(m => !backendMonths.has(m))
+            
+            if (missingInFrontend.length > 0) {
+              debugReport.issues.push(`Missing in frontend: ${missingInFrontend.join(', ')}`)
+              console.log(`❌ Missing in frontend: ${missingInFrontend.join(', ')}`)
+            }
+            
+            if (extraInFrontend.length > 0) {
+              debugReport.issues.push(`Extra in frontend: ${extraInFrontend.join(', ')}`)
+              console.log(`❌ Extra in frontend: ${extraInFrontend.join(', ')}`)
+            }
+            
+            // Check for zero revenue issues
+            const zeroRevenueResults = results.filter(r => r.totalRevenue === 0)
+            if (zeroRevenueResults.length > 0) {
+              debugReport.issues.push(`Zero revenue results: ${zeroRevenueResults.map(r => r.period).join(', ')}`)
+              console.log(`❌ Zero revenue results: ${zeroRevenueResults.map(r => r.period).join(', ')}`)
+            }
+            
+          } else {
+            console.log(`❌ No backtest results found in store`)
+            debugReport.issues.push('No backtest results found in store')
+          }
+          
+          // STEP 6: DATA COMPRESSION ANALYSIS
+          console.log('\n6. DATA COMPRESSION ANALYSIS')
+          console.log('='.repeat(50))
+          
+          // Check if data is being compressed to specific months
+          const monthCounts = {}
+          monthKeys.forEach(key => {
+            monthCounts[key] = monthlyGroups[key].length
+          })
+          
+          console.log(`📊 Month record counts:`)
+          Object.entries(monthCounts).forEach(([month, count]) => {
+            console.log(`  ${month}: ${count} records`)
+          })
+          
+          // Identify compression patterns
+          const highCountMonths = Object.entries(monthCounts).filter(([month, count]) => count > 2000)
+          const lowCountMonths = Object.entries(monthCounts).filter(([month, count]) => count < 500)
+          
+          if (highCountMonths.length > 0) {
+            console.log(`⚠️  High count months (possible compression):`)
+            highCountMonths.forEach(([month, count]) => {
+              console.log(`  ${month}: ${count} records`)
+            })
+          }
+          
+          if (lowCountMonths.length > 0) {
+            console.log(`⚠️  Low count months:`)
+            lowCountMonths.forEach(([month, count]) => {
+              console.log(`  ${month}: ${count} records`)
+            })
+          }
+          
+          // STEP 7: TIMESTAMP ANALYSIS
+          console.log('\n7. TIMESTAMP ANALYSIS')
+          console.log('='.repeat(50))
+          
+          // Check for timestamp parsing issues
+          const sampleTimestamps = filteredData.slice(0, 10).map(r => r.datetime)
+          console.log(`📅 Sample timestamps from filtered data:`)
+          sampleTimestamps.forEach((ts, index) => {
+            try {
+              const date = new Date(ts)
+              console.log(`  ${index + 1}: ${ts} -> ${date.toISOString()}`)
+            } catch (error) {
+              console.log(`  ${index + 1}: ${ts} -> INVALID`)
+            }
+          })
+          
+          // STEP 8: SUMMARY AND RECOMMENDATIONS
+          console.log('\n8. SUMMARY AND RECOMMENDATIONS')
+          console.log('='.repeat(50))
+          
+          const totalBackendRecords = Object.values(monthCounts).reduce((sum, count) => sum + count, 0)
+          const totalFrontendResults = state.backtestResults?.results?.length || 0
+          
+          console.log(`📊 SUMMARY:`)
+          console.log(`  Backend months: ${monthKeys.length}`)
+          console.log(`  Frontend results: ${totalFrontendResults}`)
+          console.log(`  Total backend records: ${totalBackendRecords.toLocaleString()}`)
+          console.log(`  Data compression ratio: ${(totalBackendRecords / (monthKeys.length * 24 * 30)).toFixed(2)}`)
+          
+          if (debugReport.issues.length > 0) {
+            console.log(`\n⚠️  ISSUES DETECTED:`)
+            debugReport.issues.forEach(issue => {
+              console.log(`  - ${issue}`)
+            })
+          }
+          
+          // Generate recommendations
+          if (monthKeys.length !== totalFrontendResults) {
+            debugReport.recommendations.push('Investigate why frontend shows different number of periods than backend')
+          }
+          
+          if (debugReport.issues.length > 0) {
+            debugReport.recommendations.push('Address data quality issues before analysis')
+          }
+          
+          if (highCountMonths.length > 0) {
+            debugReport.recommendations.push('Investigate data compression to specific months')
+          }
+          
+          console.log(`\n📋 RECOMMENDATIONS:`)
+          debugReport.recommendations.forEach(rec => {
+            console.log(`  - ${rec}`)
+          })
+          
+          return debugReport
+          
+        } catch (error) {
+          console.error('❌ Data path debug failed:', error)
+          return {
+            timestamp: new Date().toISOString(),
+            error: error.message,
+            stack: error.stack
+          }
+        }
       }
     }),
     {

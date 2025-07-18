@@ -13,7 +13,9 @@ import {
   Filter,
   SortAsc,
   SortDesc,
-  Table
+  Table,
+  AlertTriangle,
+  Bug
 } from 'lucide-react'
 import { formatCurrency, formatNumber, formatDate } from '../lib/utils'
 import { cn } from '../lib/utils'
@@ -249,6 +251,7 @@ const BacktestSummary = ({ backtestResults, onShowPeriodDetail }) => {
               }}
               options={{
                 responsive: true,
+                maintainAspectRatio: false,
                 plugins: {
                   legend: { display: false },
                   tooltip: {
@@ -270,11 +273,16 @@ const BacktestSummary = ({ backtestResults, onShowPeriodDetail }) => {
                 scales: {
                   y: { 
                     title: { display: true, text: 'Revenue (PLN)' },
-                    beginAtZero: true,
+                    beginAtZero: false, // Don't force zero to avoid compression
                     grid: {
                       color: 'rgba(0, 0, 0, 0.05)',
                       drawBorder: false,
                       lineWidth: 0.5
+                    },
+                    ticks: {
+                      callback: function(value) {
+                        return formatCurrency(value);
+                      }
                     }
                   },
                   x: { 
@@ -292,6 +300,30 @@ const BacktestSummary = ({ backtestResults, onShowPeriodDetail }) => {
         </Card>
       </div>
 
+      {/* Warnings Display */}
+      {backtestResults.warnings && backtestResults.warnings.length > 0 && (
+        <Card className="mb-4 border-orange-200 bg-orange-50">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-orange-800">
+              <AlertTriangle className="h-5 w-5" />
+              Data Quality Warnings
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {backtestResults.warnings.map((warning, index) => (
+                <div key={index} className="text-sm text-orange-700">
+                  ⚠️ {warning}
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-orange-600 mt-2">
+              Incomplete periods have been excluded from analysis to ensure accurate results.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Controls */}
       <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
         <div className="flex items-center gap-4">
@@ -302,6 +334,20 @@ const BacktestSummary = ({ backtestResults, onShowPeriodDetail }) => {
           >
             <Filter className="h-4 w-4 mr-2" />
             Profitable Only
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              const { generateDataPathDebug } = useOptimizationStore.getState()
+              console.log('🔍 Starting comprehensive data path debug...')
+              const debugReport = await generateDataPathDebug()
+              console.log('📋 Full debug report:', debugReport)
+              alert(`Debug completed! Check console for detailed report.\n\nIssues found: ${debugReport.issues?.length || 0}\nRecommendations: ${debugReport.recommendations?.length || 0}`)
+            }}
+          >
+            <Bug className="h-4 w-4 mr-2" />
+            Debug Data Path
           </Button>
         </div>
         <p className="text-sm text-muted-foreground">

@@ -70,25 +70,39 @@ const InteractiveChart = ({
     if (timestamps) {
       return timestamps.map((ts, index) => {
         try {
-          const date = new Date(ts);
-          if (isNaN(date.getTime())) {
-            console.error('Invalid date:', ts);
-            // Try to extract date from string if it's in a known format
-            if (typeof ts === 'string') {
-              const match = ts.match(/(\d{4}-\d{2}-\d{2})/);
-              if (match) {
-                const extractedDate = new Date(match[1]);
-                if (!isNaN(extractedDate.getTime())) {
-                  return extractedDate.toLocaleDateString('pl-PL', { 
-                    month: 'short', 
-                    day: 'numeric',
-                    year: 'numeric'
-                  });
+          // Handle different timestamp formats
+          let date;
+          if (typeof ts === 'string') {
+            // Try parsing as ISO string first
+            date = new Date(ts);
+            if (isNaN(date.getTime())) {
+              // Try parsing as different formats
+              const isoMatch = ts.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+              if (isoMatch) {
+                date = new Date(isoMatch[1], isoMatch[2] - 1, isoMatch[3], isoMatch[4], isoMatch[5], isoMatch[6]);
+              } else {
+                // Try simple date format
+                const dateMatch = ts.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                if (dateMatch) {
+                  date = new Date(dateMatch[1], dateMatch[2] - 1, dateMatch[3]);
+                } else {
+                  console.error('Unable to parse timestamp:', ts);
+                  return `Period ${index + 1}`;
                 }
               }
             }
+          } else if (ts instanceof Date) {
+            date = ts;
+          } else {
+            console.error('Invalid timestamp type:', typeof ts, ts);
             return `Period ${index + 1}`;
           }
+
+          if (isNaN(date.getTime())) {
+            console.error('Invalid date after parsing:', ts);
+            return `Period ${index + 1}`;
+          }
+
           return date.toLocaleString('pl-PL', { 
             month: 'short', 
             day: 'numeric', 
@@ -284,12 +298,15 @@ const InteractiveChart = ({
         display: selectedDataSeries.includes('revenue'),
         position: 'right',
         title: { display: true, text: 'Revenue (PLN)' },
-        beginAtZero: true,
+        beginAtZero: false, // Don't force zero to avoid compression
         grid: {
           drawOnChartArea: false,
         },
         ticks: {
-          font: { size: 12 }
+          font: { size: 12 },
+          callback: function(value) {
+            return value.toLocaleString('pl-PL') + ' PLN';
+          }
         }
       },
       x: { 

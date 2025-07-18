@@ -53,11 +53,39 @@ const AFRRInteractiveChart = ({
   const labels = useMemo(() => {
     return timestamps.map((timestamp, index) => {
       try {
-        const date = new Date(timestamp);
-        if (isNaN(date.getTime())) {
-          console.error('Invalid date:', timestamp);
-          return `Invalid-${index}`;
+        // Handle different timestamp formats
+        let date;
+        if (typeof timestamp === 'string') {
+          // Try parsing as ISO string first
+          date = new Date(timestamp);
+          if (isNaN(date.getTime())) {
+            // Try parsing as different formats
+            const isoMatch = timestamp.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+            if (isoMatch) {
+              date = new Date(isoMatch[1], isoMatch[2] - 1, isoMatch[3], isoMatch[4], isoMatch[5], isoMatch[6]);
+            } else {
+              // Try simple date format
+              const dateMatch = timestamp.match(/^(\d{4})-(\d{2})-(\d{2})/);
+              if (dateMatch) {
+                date = new Date(dateMatch[1], dateMatch[2] - 1, dateMatch[3]);
+              } else {
+                console.error('Unable to parse timestamp:', timestamp);
+                return `Period ${index + 1}`;
+              }
+            }
+          }
+        } else if (timestamp instanceof Date) {
+          date = timestamp;
+        } else {
+          console.error('Invalid timestamp type:', typeof timestamp, timestamp);
+          return `Period ${index + 1}`;
         }
+
+        if (isNaN(date.getTime())) {
+          console.error('Invalid date after parsing:', timestamp);
+          return `Period ${index + 1}`;
+        }
+
         return date.toLocaleString('pl-PL', { 
           month: 'short', 
           day: 'numeric', 
@@ -66,7 +94,7 @@ const AFRRInteractiveChart = ({
         });
       } catch (error) {
         console.error('Date parsing error:', error, 'timestamp:', timestamp);
-        return `Error-${index}`;
+        return `Period ${index + 1}`;
       }
     });
   }, [timestamps]);
