@@ -210,6 +210,14 @@ const InteractiveChart = ({
   const options = {
     responsive: true,
     maintainAspectRatio: false,
+    layout: {
+      padding: {
+        top: 20,
+        right: 20,
+        bottom: 20,
+        left: 20
+      }
+    },
     plugins: {
       title: { 
         display: true, 
@@ -244,6 +252,11 @@ const InteractiveChart = ({
             } else if (selectedDataSeries.includes('soc')) {
               return `${label}: ${value.toFixed(2)} MWh`;
             } else if (selectedDataSeries.includes('power')) {
+              if (label.includes('Charging')) {
+                return `${label}: ${Math.abs(value).toFixed(2)} MW`;
+              } else if (label.includes('Discharging')) {
+                return `${label}: ${value.toFixed(2)} MW`;
+              }
               return `${label}: ${Math.abs(value).toFixed(2)} MW`;
             } else if (selectedDataSeries.includes('revenue')) {
               return `${label}: ${value.toFixed(2)} PLN`;
@@ -259,7 +272,7 @@ const InteractiveChart = ({
         display: selectedDataSeries.includes('prices'),
         position: 'left',
         title: { display: true, text: 'Price (PLN/MWh)' },
-        beginAtZero: false, // Don't force zero to avoid compression
+        beginAtZero: false,
         grid: {
           color: 'rgba(0, 0, 0, 0.05)',
           drawBorder: false,
@@ -271,12 +284,18 @@ const InteractiveChart = ({
             return value.toLocaleString('pl-PL') + ' PLN/MWh';
           }
         },
-        // Dynamic scaling to prevent compression
+        // Proper scaling to prevent compression
         afterDataLimits: (axis) => {
-          const range = axis.max - axis.min;
-          const padding = range * 0.1; // 10% padding
-          axis.min = axis.min - padding;
-          axis.max = axis.max + padding;
+          if (axis.max === axis.min) {
+            // If all values are the same, add some range
+            axis.max = axis.max + 50;
+            axis.min = axis.min - 50;
+          } else {
+            const range = axis.max - axis.min;
+            const padding = Math.max(range * 0.25, 20); // At least 20 units padding, 25% range
+            axis.min = axis.min - padding;
+            axis.max = axis.max + padding;
+          }
         }
       },
       y1: {
@@ -284,19 +303,25 @@ const InteractiveChart = ({
         display: selectedDataSeries.includes('soc'),
         position: 'right',
         title: { display: true, text: 'Energy (MWh)' },
-        beginAtZero: false, // Don't force zero to avoid compression
+        beginAtZero: false,
         grid: {
           drawOnChartArea: false,
         },
         ticks: {
           font: { size: 12 }
         },
-        // Dynamic scaling to prevent compression
+        // Proper scaling to prevent compression
         afterDataLimits: (axis) => {
-          const range = axis.max - axis.min;
-          const padding = range * 0.1; // 10% padding
-          axis.min = axis.min - padding;
-          axis.max = axis.max + padding;
+          if (axis.max === axis.min) {
+            // If all values are the same, add some range
+            axis.max = axis.max + 10;
+            axis.min = axis.min - 10;
+          } else {
+            const range = axis.max - axis.min;
+            const padding = Math.max(range * 0.25, 5); // At least 5 units padding, 25% range
+            axis.min = axis.min - padding;
+            axis.max = axis.max + padding;
+          }
         }
       },
       y2: {
@@ -304,19 +329,28 @@ const InteractiveChart = ({
         display: selectedDataSeries.includes('power'),
         position: 'right',
         title: { display: true, text: 'Power (MW)' },
-        beginAtZero: false, // Don't force zero to avoid compression
+        beginAtZero: false,
         grid: {
           drawOnChartArea: false,
         },
         ticks: {
-          font: { size: 12 }
+          font: { size: 12 },
+          callback: function(value) {
+            return Math.abs(value).toFixed(1) + ' MW';
+          }
         },
-        // Dynamic scaling to prevent compression
+        // Proper scaling to prevent compression
         afterDataLimits: (axis) => {
-          const range = axis.max - axis.min;
-          const padding = range * 0.1; // 10% padding
-          axis.min = axis.min - padding;
-          axis.max = axis.max + padding;
+          if (axis.max === axis.min) {
+            // If all values are the same, add some range
+            axis.max = axis.max + 5;
+            axis.min = axis.min - 5;
+          } else {
+            const range = axis.max - axis.min;
+            const padding = Math.max(range * 0.25, 2); // At least 2 units padding, 25% range
+            axis.min = axis.min - padding;
+            axis.max = axis.max + padding;
+          }
         }
       },
       y3: {
@@ -324,7 +358,7 @@ const InteractiveChart = ({
         display: selectedDataSeries.includes('revenue'),
         position: 'right',
         title: { display: true, text: 'Revenue (PLN)' },
-        beginAtZero: false, // Don't force zero to avoid compression
+        beginAtZero: false,
         grid: {
           drawOnChartArea: false,
         },
@@ -334,12 +368,18 @@ const InteractiveChart = ({
             return value.toLocaleString('pl-PL') + ' PLN';
           }
         },
-        // Dynamic scaling to prevent compression
+        // Proper scaling to prevent compression
         afterDataLimits: (axis) => {
-          const range = axis.max - axis.min;
-          const padding = range * 0.1; // 10% padding
-          axis.min = axis.min - padding;
-          axis.max = axis.max + padding;
+          if (axis.max === axis.min) {
+            // If all values are the same, add some range
+            axis.max = axis.max + 200;
+            axis.min = axis.min - 200;
+          } else {
+            const range = axis.max - axis.min;
+            const padding = Math.max(range * 0.25, 100); // At least 100 PLN padding, 25% range
+            axis.min = axis.min - padding;
+            axis.max = axis.max + padding;
+          }
         }
       },
       x: { 
@@ -531,7 +571,7 @@ const InteractiveChart = ({
         </div>
 
         {/* Chart */}
-        <div className="w-full h-[500px] relative">
+        <div className="w-full h-[800px] relative bg-white border border-gray-200 rounded-lg p-4">
           {chartType === 'bar' ? (
             <Bar data={chartData} options={options} />
           ) : (
