@@ -9,17 +9,31 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointEleme
 
 
 // Component for displaying Electricity Prices.
-export const PriceChart = ({ data, priceCategories, title }) => {
-    const hours = Array.from({ length: data.length }, (_, i) => i + 1);
+export const PriceChart = ({ data, priceCategories, title, timestamps = null }) => {
+    // Generate labels: use timestamps if available, otherwise use indices
+    const labels = timestamps ? timestamps.map(ts => {
+        try {
+            const date = new Date(ts);
+            return date.toLocaleString('pl-PL', { 
+                month: 'short', 
+                day: 'numeric', 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        } catch (error) {
+            return ts;
+        }
+    }) : Array.from({ length: data.length }, (_, i) => i + 1);
+    
     const chartData = {
-        labels: hours,
+        labels: labels,
         datasets: [{
             label: 'Price (PLN/MWh)',
             data: data,
             borderColor: '#667eea',
             backgroundColor: 'rgba(102, 126, 234, 0.1)',
-            pointBackgroundColor: hours.map((_, i) => {
-                const cat = priceCategories[i];
+            pointBackgroundColor: labels.map((_, i) => {
+                const cat = priceCategories ? priceCategories[i] : 2;
                 return cat === 1 ? '#3498db' : cat === 2 ? '#f39c12' : '#e74c3c';
             }),
             pointBorderColor: '#fff',
@@ -35,16 +49,22 @@ export const PriceChart = ({ data, priceCategories, title }) => {
             title: { display: true, text: title },
             legend: { display: true }
         },
-                  scales: {
+        scales: {
             y: { beginAtZero: false, title: { display: true, text: 'Price (PLN/MWh)' } },
-            x: { title: { display: true, text: 'Time Period' } }
-          }
+            x: { 
+                title: { display: true, text: timestamps ? 'Date & Time' : 'Time Period' },
+                ticks: {
+                    maxTicksLimit: timestamps ? 10 : 20,
+                    maxRotation: 45
+                }
+            }
+        }
     };
     return <Line data={chartData} options={options} />;
 };
 
 // Component for displaying Battery State of Charge.
-export const SoCChart = ({ data, title }) => {
+export const SoCChart = ({ data, title, timestamps = null }) => {
     // Debug: Log SoC data being passed to chart
     console.log('SoCChart Debug:');
     console.log('  Data length:', data.length);
@@ -54,9 +74,23 @@ export const SoCChart = ({ data, title }) => {
     console.log('  Max SoC:', Math.max(...data));
     console.log('  SoC range:', Math.max(...data) - Math.min(...data));
     
-    const hours = Array.from({ length: data.length }, (_, i) => i + 1);
+    // Generate labels: use timestamps if available, otherwise use indices
+    const labels = timestamps ? timestamps.map(ts => {
+        try {
+            const date = new Date(ts);
+            return date.toLocaleString('pl-PL', { 
+                month: 'short', 
+                day: 'numeric', 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        } catch (error) {
+            return ts;
+        }
+    }) : Array.from({ length: data.length }, (_, i) => i + 1);
+    
     const chartData = {
-        labels: hours,
+        labels: labels,
         datasets: [{
             label: 'State of Charge (MWh)',
             data: data,
@@ -78,17 +112,37 @@ export const SoCChart = ({ data, title }) => {
         },
         scales: {
             y: { beginAtZero: true, title: { display: true, text: 'Energy (MWh)' } },
-            x: { title: { display: true, text: 'Hour' } }
+            x: { 
+                title: { display: true, text: timestamps ? 'Date & Time' : 'Hour' },
+                ticks: {
+                    maxTicksLimit: timestamps ? 10 : 20,
+                    maxRotation: 45
+                }
+            }
         }
     };
     return <Line data={chartData} options={options} />;
 };
 
 // Component for displaying Battery Charging/Discharging Power.
-export const PowerChart = ({ charging, discharging, title }) => {
-    const hours = Array.from({ length: charging.length }, (_, i) => i + 1);
+export const PowerChart = ({ charging, discharging, title, timestamps = null }) => {
+    // Generate labels: use timestamps if available, otherwise use indices
+    const labels = timestamps ? timestamps.map(ts => {
+        try {
+            const date = new Date(ts);
+            return date.toLocaleString('pl-PL', { 
+                month: 'short', 
+                day: 'numeric', 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        } catch (error) {
+            return ts;
+        }
+    }) : Array.from({ length: charging.length }, (_, i) => i + 1);
+    
     const chartData = {
-        labels: hours,
+        labels: labels,
         datasets: [
             {
                 label: 'Charging Power (MW)',
@@ -114,17 +168,37 @@ export const PowerChart = ({ charging, discharging, title }) => {
         },
         scales: {
             y: { title: { display: true, text: 'Power (MW)' } },
-            x: { title: { display: true, text: 'Hour' } }
+            x: { 
+                title: { display: true, text: timestamps ? 'Date & Time' : 'Hour' },
+                ticks: {
+                    maxTicksLimit: timestamps ? 10 : 20,
+                    maxRotation: 45
+                }
+            }
         }
     };
     return <Bar data={chartData} options={options} />;
 };
 
 // Component for displaying Hourly Revenue.
-export const RevenueChart = ({ data, title }) => {
-    const hours = Array.from({ length: data.length }, (_, i) => i + 1);
+export const RevenueChart = ({ data, title, timestamps = null }) => {
+    // Generate labels: use timestamps if available, otherwise use indices
+    const labels = timestamps ? timestamps.map(ts => {
+        try {
+            const date = new Date(ts);
+            return date.toLocaleString('pl-PL', { 
+                month: 'short', 
+                day: 'numeric', 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        } catch (error) {
+            return ts;
+        }
+    }) : Array.from({ length: data.length }, (_, i) => i + 1);
+    
     const chartData = {
-        labels: hours,
+        labels: labels,
         datasets: [{
             label: 'Hourly Revenue (PLN)',
             data: data,
@@ -139,10 +213,16 @@ export const RevenueChart = ({ data, title }) => {
             title: { display: true, text: title },
             legend: { display: true }
         },
-                  scales: {
+        scales: {
             y: { title: { display: true, text: 'Revenue (PLN)' } },
-            x: { title: { display: true, text: 'Time Period' } }
-          }
+            x: { 
+                title: { display: true, text: timestamps ? 'Date & Time' : 'Time Period' },
+                ticks: {
+                    maxTicksLimit: timestamps ? 10 : 20,
+                    maxRotation: 45
+                }
+            }
+        }
     };
     return <Bar data={chartData} options={options} />;
 };

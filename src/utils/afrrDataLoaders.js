@@ -272,8 +272,39 @@ export const loadSystemContractingData = async (options = {}) => {
             record.sk_d1_fcst !== null && !isNaN(record.sk_d1_fcst)
         );
 
-        if (validRecords.length < AFRR_CONFIG.minDataPoints) {
-            throw new Error(`Insufficient valid contracting status data: ${validRecords.length} records (minimum: ${AFRR_CONFIG.minDataPoints})`);
+        // Adjust minimum data points based on time range
+        let minRequired = AFRR_CONFIG.minDataPoints;
+        
+        if (startDate && endDate) {
+            // Custom date range - calculate days and adjust minimum
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            const daysDiff = (end - start) / (1000 * 60 * 60 * 24);
+            
+            if (daysDiff <= 1) {
+                minRequired = 20; // Lower requirement for 1 day analysis
+            } else if (daysDiff <= 7) {
+                minRequired = 50; // Medium requirement for 7 days analysis
+            } else if (daysDiff <= 30) {
+                minRequired = 100; // Standard requirement for 30 days analysis
+            } else {
+                minRequired = 200; // Higher requirement for longer periods
+            }
+        } else if (lookbackDays) {
+            // Lookback period
+            if (lookbackDays <= 1) {
+                minRequired = 20; // Lower requirement for 24h analysis
+            } else if (lookbackDays <= 7) {
+                minRequired = 50; // Medium requirement for 7d analysis
+            }
+        }
+        
+        if (validRecords.length < minRequired) {
+            const periodDesc = startDate && endDate ? 
+                `${Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24))} days` :
+                `${lookbackDays} day${lookbackDays > 1 ? 's' : ''}`;
+            
+            throw new Error(`Insufficient valid contracting status data: ${validRecords.length} records (minimum: ${minRequired} for ${periodDesc} analysis)`);
         }
 
         console.log(`Valid system contracting status records: ${validRecords.length}`);

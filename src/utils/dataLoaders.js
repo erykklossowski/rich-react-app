@@ -108,44 +108,100 @@ export const loadPolishData = async () => {
 
 // Aggregate 15-minute data to hourly data
 const aggregateToHourly = (data) => {
+    console.log(`Starting aggregation of ${data.length} 15-minute records to hourly`);
+    
     const hourlyMap = new Map();
+    let processedRecords = 0;
+    let skippedRecords = 0;
     
     data.forEach(record => {
-        const date = new Date(record.dtime);
-        // Round to the nearest hour
-        const hourKey = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), 0, 0, 0);
-        
-        // Use local time string to avoid timezone shift
-        const hourKeyStr = hourKey.getFullYear() + '-' + 
-                          String(hourKey.getMonth() + 1).padStart(2, '0') + '-' + 
-                          String(hourKey.getDate()).padStart(2, '0') + ' ' + 
-                          String(hourKey.getHours()).padStart(2, '0') + ':00:00';
-        
-        if (!hourlyMap.has(hourKeyStr)) {
-            hourlyMap.set(hourKeyStr, {
-                dtime: hourKeyStr,
-                dtime_utc: hourKey.toISOString(),
-                business_date: record.business_date,
-                period: date.getHours(),
-                prices: [],
-                count: 0
-            });
+        try {
+            // Validate record
+            if (!record.dtime || !record.csdac_pln || isNaN(record.csdac_pln)) {
+                skippedRecords++;
+                return;
+            }
+            
+            const date = new Date(record.dtime);
+            
+            // Validate date
+            if (isNaN(date.getTime())) {
+                console.warn(`Invalid date in record: ${record.dtime}`);
+                skippedRecords++;
+                return;
+            }
+            
+            // Round to the nearest hour (truncate minutes and seconds)
+            const hourKey = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), 0, 0, 0);
+            
+            // Create consistent hour key string
+            const hourKeyStr = hourKey.toISOString().slice(0, 13) + ':00:00.000Z';
+            
+            if (!hourlyMap.has(hourKeyStr)) {
+                hourlyMap.set(hourKeyStr, {
+                    dtime: hourKey.toISOString().slice(0, 19).replace('T', ' '),
+                    dtime_utc: hourKey.toISOString(),
+                    business_date: record.business_date || hourKey.toISOString().slice(0, 10),
+                    period: date.getHours(),
+                    prices: [],
+                    count: 0,
+                    timestamps: []
+                });
+            }
+            
+            const hourlyRecord = hourlyMap.get(hourKeyStr);
+            hourlyRecord.prices.push(record.csdac_pln);
+            hourlyRecord.timestamps.push(record.dtime);
+            hourlyRecord.count++;
+            processedRecords++;
+            
+        } catch (error) {
+            console.warn(`Error processing record: ${error.message}`, record);
+            skippedRecords++;
         }
-        
-        const hourlyRecord = hourlyMap.get(hourKeyStr);
-        hourlyRecord.prices.push(record.csdac_pln);
-        hourlyRecord.count++;
     });
     
+    console.log(`Processed ${processedRecords} records, skipped ${skippedRecords} records`);
+    
     // Calculate average price for each hour
-    const hourlyData = Array.from(hourlyMap.values()).map(record => ({
-        ...record,
-        csdac_pln: record.prices.reduce((sum, price) => sum + price, 0) / record.prices.length,
-        price_count: record.count
-    }));
+    const hourlyData = Array.from(hourlyMap.values()).map(record => {
+        const avgPrice = record.prices.reduce((sum, price) => sum + price, 0) / record.prices.length;
+        
+        return {
+            dtime: record.dtime,
+            dtime_utc: record.dtime_utc,
+            business_date: record.business_date,
+            period: record.period,
+            csdac_pln: avgPrice,
+            price_count: record.count,
+            original_timestamps: record.timestamps
+        };
+    });
     
     // Sort by time
     hourlyData.sort((a, b) => new Date(a.dtime) - new Date(b.dtime));
+    
+    console.log(`Aggregation complete: ${hourlyData.length} hourly records created`);
+    console.log(`Date range: ${hourlyData[0]?.dtime} to ${hourlyData[hourlyData.length-1]?.dtime}`);
+    
+    // Validate aggregation quality
+    const expectedRecordsPerDay = 24;
+    const totalDays = hourlyData.length / expectedRecordsPerDay;
+    console.log(`Expected days: ${totalDays.toFixed(1)}, Actual records: ${hourlyData.length}`);
+    
+    if (hourlyData.length > 0) {
+        const firstDate = new Date(hourlyData[0].dtime);
+        const lastDate = new Date(hourlyData[hourlyData.length-1].dtime);
+        const actualDays = (lastDate - firstDate) / (1000 * 60 * 60 * 24);
+        console.log(`Actual date span: ${actualDays.toFixed(1)} days`);
+        
+        const recordsPerDay = hourlyData.length / actualDays;
+        console.log(`Records per day: ${recordsPerDay.toFixed(1)} (expected: ${expectedRecordsPerDay})`);
+        
+        if (recordsPerDay < 20 || recordsPerDay > 28) {
+            console.warn(`⚠️  Unusual aggregation ratio: ${recordsPerDay.toFixed(1)} records/day`);
+        }
+    }
     
     return hourlyData;
 };

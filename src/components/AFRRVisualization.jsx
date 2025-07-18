@@ -1,32 +1,14 @@
 // Path: src/components/AFRRVisualization.jsx
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Line } from 'react-chartjs-2';
-import {
-    Chart as ChartJS,
-    CategoryScale,
-    LinearScale,
-    PointElement,
-    LineElement,
-    Title,
-    Tooltip,
-    Legend,
-    Filler
-} from 'chart.js';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Button } from './ui/button';
 import { loadSystemContractingData, loadAFRRDataForAnalysis } from '../utils/afrrDataLoaders';
 import AFRROptimizer from '../utils/AFRROptimizerClass';
+import AFRRInteractiveChart from './AFRRInteractiveChart';
+import { getDataConfig } from '../utils/dataConfig';
 
-// Register Chart.js components
-ChartJS.register(
-    CategoryScale,
-    LinearScale,
-    PointElement,
-    LineElement,
-    Title,
-    Tooltip,
-    Legend,
-    Filler
-);
+
 
 const AFRRVisualization = () => {
     const [data, setData] = useState(null);
@@ -34,36 +16,60 @@ const AFRRVisualization = () => {
     const [error, setError] = useState(null);
     const [analysis, setAnalysis] = useState(null);
     const [categorizationMethod, setCategorizationMethod] = useState('quantile');
-    const [timeRange, setTimeRange] = useState('24h');
     const [categorizationOptions, setCategorizationOptions] = useState({});
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
 
     const optimizer = useMemo(() => new AFRROptimizer(), []);
 
+    // Get data configuration for date constraints
+    const dataConfig = useMemo(async () => {
+        try {
+            return await getDataConfig();
+        } catch (error) {
+            console.error('Error loading data config:', error);
+            return null;
+        }
+    }, []);
+
+    // Initialize default date range when component mounts
+    useEffect(() => {
+        const initializeDates = async () => {
+            try {
+                const config = await getDataConfig();
+                if (config) {
+                    // Set default to last 7 days
+                    const endDate = new Date(config.dataEndDate);
+                    const startDate = new Date(endDate);
+                    startDate.setDate(startDate.getDate() - 7);
+                    
+                    setEndDate(endDate.toISOString().split('T')[0]);
+                    setStartDate(startDate.toISOString().split('T')[0]);
+                }
+            } catch (error) {
+                console.error('Error initializing dates:', error);
+            }
+        };
+        
+        initializeDates();
+    }, []);
+
     // Load and process data
     const loadData = async () => {
+        if (!startDate || !endDate) {
+            console.log('Date range not set yet, skipping data load');
+            return;
+        }
+
         setLoading(true);
         setError(null);
         
         try {
-            // Load system contracting data based on time range
-            let lookbackDays;
-            switch (timeRange) {
-                case '24h':
-                    lookbackDays = 1;
-                    break;
-                case '7d':
-                    lookbackDays = 7;
-                    break;
-                case '30d':
-                    lookbackDays = 30;
-                    break;
-                default:
-                    lookbackDays = 1;
-            }
-            
+            // Load system contracting data based on custom date range
             const contractingData = await loadSystemContractingData({
-                lookbackDays,
-                maxRecords: timeRange === '24h' ? 24 : timeRange === '7d' ? 168 : 720 // Hourly intervals: 24h=24, 7d=168, 30d=720
+                startDate,
+                endDate,
+                maxRecords: 10000 // Allow up to 10k records for custom ranges
             });
             
             // Transform data to match expected format
@@ -99,216 +105,9 @@ const AFRRVisualization = () => {
     // Load data on component mount and when dependencies change
     useEffect(() => {
         loadData();
-    }, [timeRange, categorizationMethod, categorizationOptions]);
+    }, [startDate, endDate, categorizationMethod, categorizationOptions]);
 
-    // Chart configuration
-    const chartData = useMemo(() => {
-        if (!data || !data.contractingValues) return null;
 
-        const labels = data.timestamps.map((timestamp, index) => {
-            try {
-                const date = new Date(timestamp);
-                if (isNaN(date.getTime())) {
-                    console.error('Invalid date:', timestamp);
-                    return `Invalid-${index}`;
-                }
-                // Show date and time for better readability
-                return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-            } catch (error) {
-                console.error('Date parsing error:', error, 'timestamp:', timestamp);
-                return `Error-${index}`;
-            }
-        });
-
-        const contractingValues = data.contractingValues;
-        const avgValue = contractingValues.reduce((sum, val) => sum + val, 0) / contractingValues.length;
-
-        return {
-            labels,
-            datasets: [
-                {
-                    label: 'Contracting Status (sk_d1_fcst)',
-                    data: contractingValues,
-                    borderColor: 'rgb(75, 192, 192)',
-                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.1
-                },
-                {
-                    label: 'Average',
-                    data: Array(contractingValues.length).fill(avgValue),
-                    borderColor: 'rgba(255, 99, 132, 0.5)',
-                    backgroundColor: 'rgba(255, 99, 132, 0.1)',
-                    borderWidth: 1,
-                    borderDash: [5, 5],
-                    fill: false,
-                    pointRadius: 0
-                }
-            ]
-        };
-    }, [data]);
-
-    // Viterbi path chart data
-    const viterbiChartData = useMemo(() => {
-        if (!data || !analysis || !analysis.success) return null;
-
-        const labels = data.timestamps.map((timestamp, index) => {
-            try {
-                const date = new Date(timestamp);
-                if (isNaN(date.getTime())) {
-                    console.error('Invalid date:', timestamp);
-                    return `Invalid-${index}`;
-                }
-                // Show date and time for better readability
-                return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-            } catch (error) {
-                console.error('Date parsing error:', error, 'timestamp:', timestamp);
-                return `Error-${index}`;
-            }
-        });
-
-        const stateColors = {
-            1: 'rgba(255, 99, 132, 0.8)',   // Undercontracted - Red
-            2: 'rgba(255, 205, 86, 0.8)',   // Balanced - Yellow
-            3: 'rgba(75, 192, 192, 0.8)'    // Overcontracted - Green
-        };
-
-        const stateNames = {
-            1: 'Undercontracted',
-            2: 'Balanced',
-            3: 'Overcontracted'
-        };
-
-        return {
-            labels,
-            datasets: [
-                {
-                    label: 'Viterbi Path (Predicted States)',
-                    data: analysis.viterbiPath,
-                    borderColor: 'rgb(153, 102, 255)',
-                    backgroundColor: analysis.viterbiPath.map(state => stateColors[state]),
-                    borderWidth: 2,
-                    pointRadius: 4,
-                    pointHoverRadius: 6,
-                    tension: 0.1
-                },
-                {
-                    label: 'Observed States',
-                    data: analysis.contractingStates,
-                    borderColor: 'rgba(201, 203, 207, 0.8)',
-                    backgroundColor: analysis.contractingStates.map(state => stateColors[state]),
-                    borderWidth: 1,
-                    pointRadius: 2,
-                    pointHoverRadius: 4,
-                    tension: 0.1
-                }
-            ]
-        };
-    }, [data, analysis]);
-
-    // Chart options
-    const chartOptions = {
-        responsive: true,
-        plugins: {
-            legend: {
-                position: 'top',
-            },
-            title: {
-                display: true,
-                text: 'aFRR Contracting Status Analysis',
-            },
-            tooltip: {
-                callbacks: {
-                    label: function(context) {
-                        const label = context.dataset.label || '';
-                        const value = context.parsed.y;
-                        return `${label}: ${value.toFixed(2)} MW`;
-                    }
-                }
-            }
-        },
-        scales: {
-            y: {
-                beginAtZero: false,
-                title: {
-                    display: true,
-                    text: 'Contracting Status (MW)'
-                }
-            },
-            x: {
-                title: {
-                    display: true,
-                    text: 'Time'
-                },
-                ticks: {
-                    maxTicksLimit: 20, // Limit number of x-axis labels to prevent overcrowding
-                    maxRotation: 45,
-                    minRotation: 0
-                }
-            }
-        }
-    };
-
-    const viterbiChartOptions = {
-        responsive: true,
-        plugins: {
-            legend: {
-                position: 'top',
-            },
-            title: {
-                display: true,
-                text: 'HMM State Analysis - Viterbi Path vs Observed States',
-            },
-            tooltip: {
-                callbacks: {
-                    label: function(context) {
-                        const label = context.dataset.label || '';
-                        const value = context.parsed.y;
-                        const stateNames = {
-                            1: 'Undercontracted',
-                            2: 'Balanced',
-                            3: 'Overcontracted'
-                        };
-                        return `${label}: ${stateNames[value] || value}`;
-                    }
-                }
-            }
-        },
-        scales: {
-            y: {
-                beginAtZero: false,
-                min: 0.5,
-                max: 3.5,
-                ticks: {
-                    stepSize: 1,
-                    callback: function(value) {
-                        const stateNames = {
-                            1: 'Undercontracted',
-                            2: 'Balanced',
-                            3: 'Overcontracted'
-                        };
-                        return stateNames[value] || value;
-                    }
-                },
-                title: {
-                    display: true,
-                    text: 'Contracting State'
-                }
-            },
-            x: {
-                title: {
-                    display: true,
-                    text: 'Time'
-                },
-                ticks: {
-                    maxTicksLimit: 20, // Limit number of x-axis labels to prevent overcrowding
-                    maxRotation: 45,
-                    minRotation: 0
-                }
-            }
-        }
-    };
 
     // Handle categorization method change
     const handleCategorizationChange = (method) => {
@@ -316,9 +115,23 @@ const AFRRVisualization = () => {
         setCategorizationOptions({}); // Reset options for new method
     };
 
-    // Handle time range change
-    const handleTimeRangeChange = (range) => {
-        setTimeRange(range);
+    // Handle date range changes
+    const handleStartDateChange = (date) => {
+        setStartDate(date);
+    };
+
+    const handleEndDateChange = (date) => {
+        setEndDate(date);
+    };
+
+    // Quick date range presets
+    const setQuickRange = (days) => {
+        const end = new Date();
+        const start = new Date();
+        start.setDate(start.getDate() - days);
+        
+        setEndDate(end.toISOString().split('T')[0]);
+        setStartDate(start.toISOString().split('T')[0]);
     };
 
     if (loading) {
@@ -345,47 +158,104 @@ const AFRRVisualization = () => {
                 <h2 className="text-2xl font-bold mb-4">aFRR Market Analysis</h2>
                 
                 {/* Controls */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Time Range
-                        </label>
-                        <select
-                            value={timeRange}
-                            onChange={(e) => handleTimeRangeChange(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="24h">Last 24 Hours</option>
-                            <option value="7d">Last 7 Days</option>
-                            <option value="30d">Last 30 Days</option>
-                        </select>
-                    </div>
-                    
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Categorization Method
-                        </label>
-                        <select
-                            value={categorizationMethod}
-                            onChange={(e) => handleCategorizationChange(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="quantile">Quantile-based</option>
-                            <option value="kmeans">K-means Clustering</option>
-                            <option value="volatility">Volatility-based</option>
-                            <option value="adaptive">Adaptive Thresholds</option>
-                            <option value="zscore">Z-score</option>
-                            <option value="threshold">Fixed Thresholds</option>
-                        </select>
-                    </div>
-                    
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Data Points
-                        </label>
-                        <div className="text-lg font-semibold text-gray-900">
-                            {data ? data.contractingValues.length : 0}
+                <div className="space-y-4 mb-6">
+                    {/* Date Range Controls */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Start Date
+                            </label>
+                            <input
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => handleStartDateChange(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
                         </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                End Date
+                            </label>
+                            <input
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => handleEndDateChange(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Categorization Method
+                            </label>
+                            <select
+                                value={categorizationMethod}
+                                onChange={(e) => handleCategorizationChange(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                                <option value="quantile">Quantile-based</option>
+                                <option value="kmeans">K-means Clustering</option>
+                                <option value="volatility">Volatility-based</option>
+                                <option value="adaptive">Adaptive Thresholds</option>
+                                <option value="zscore">Z-score</option>
+                                <option value="threshold">Fixed Thresholds</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Data Points
+                            </label>
+                            <div className="text-lg font-semibold text-gray-900">
+                                {data ? data.contractingValues.length : 0}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Quick Date Range Presets */}
+                    <div className="flex flex-wrap gap-2">
+                        <span className="text-sm font-medium text-gray-700 mr-2">Quick Ranges:</span>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setQuickRange(1)}
+                            className="text-xs"
+                        >
+                            1 Day
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setQuickRange(5)}
+                            className="text-xs"
+                        >
+                            5 Days
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setQuickRange(7)}
+                            className="text-xs"
+                        >
+                            7 Days
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setQuickRange(30)}
+                            className="text-xs"
+                        >
+                            30 Days
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setQuickRange(90)}
+                            className="text-xs"
+                        >
+                            90 Days
+                        </Button>
                     </div>
                 </div>
 
@@ -423,62 +293,18 @@ const AFRRVisualization = () => {
                     </div>
                 )}
 
-                {/* Charts */}
-                <div className="space-y-6">
-                    {/* Contracting Status Chart */}
-                    {chartData && (
-                        <div className="bg-white border rounded-lg p-4">
-                            <h3 className="text-lg font-semibold mb-4">Contracting Status Time Series</h3>
-                            <div className="h-80 w-full" style={{ position: 'relative' }}>
-                                <Line 
-                                    data={chartData} 
-                                    options={{
-                                        ...chartOptions,
-                                        responsive: true,
-                                        maintainAspectRatio: false,
-                                        devicePixelRatio: 1,
-                                        elements: {
-                                            point: {
-                                                radius: 2,
-                                                hoverRadius: 4
-                                            },
-                                            line: {
-                                                tension: 0.1
-                                            }
-                                        }
-                                    }} 
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Viterbi Path Chart */}
-                    {viterbiChartData && analysis && analysis.success && (
-                        <div className="bg-white border rounded-lg p-4">
-                            <h3 className="text-lg font-semibold mb-4">HMM State Analysis</h3>
-                            <div className="h-80 w-full" style={{ position: 'relative' }}>
-                                <Line 
-                                    data={viterbiChartData} 
-                                    options={{
-                                        ...viterbiChartOptions,
-                                        responsive: true,
-                                        maintainAspectRatio: false,
-                                        devicePixelRatio: 1,
-                                        elements: {
-                                            point: {
-                                                radius: 2,
-                                                hoverRadius: 4
-                                            },
-                                            line: {
-                                                tension: 0.1
-                                            }
-                                        }
-                                    }} 
-                                />
-                            </div>
-                        </div>
-                    )}
-                </div>
+                {/* Interactive Chart */}
+                {data && analysis && (
+                    <AFRRInteractiveChart
+                        contractingValues={data.contractingValues}
+                        timestamps={data.timestamps}
+                        viterbiPath={analysis.success ? analysis.viterbiPath : []}
+                        contractingStates={analysis.success ? analysis.contractingStates : []}
+                        transitionMatrix={analysis.success ? analysis.transitionMatrix : []}
+                        emissionMatrix={analysis.success ? analysis.emissionMatrix : []}
+                        title="aFRR Market Analysis"
+                    />
+                )}
 
                 {/* Analysis Results */}
                 {analysis && analysis.success && (
@@ -530,7 +356,11 @@ const AFRRVisualization = () => {
                             <p className="text-sm text-gray-600">
                                 Categorization: {analysis.categorizationMethod} | 
                                 Data points: {data.contractingValues.length} | 
-                                Time range: {timeRange}
+                                Date range: {startDate} to {endDate}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                                💡 Viterbi algorithm smooths state transitions to reduce noise. 
+                                Differences between observed and predicted states are normal and indicate the model's smoothing behavior.
                             </p>
                         </div>
                     </div>

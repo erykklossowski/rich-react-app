@@ -365,7 +365,9 @@ const App = () => {
           console.log(`Parameters:`, params)
           
           try {
-            const result = optimizer.optimize(prices, params, categorizationMethod, categorizationOptions)
+            // Extract timestamps from the group data
+            const timestamps = groupData.map(record => record.datetime)
+            const result = optimizer.optimize(prices, params, categorizationMethod, categorizationOptions, timestamps)
             
             if (result.success) {
               console.log(`✓ Optimization successful for period ${key}`)

@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
 import { useOptimizationStore } from '../store/optimizationStore'
-import { PriceChart, SoCChart, PowerChart, RevenueChart } from './ChartComponents'
+import InteractiveChart from './InteractiveChart'
 import MetricsGrid from './MetricsGrid'
 import AIInsights from './AIInsights'
 import DebugReport from './DebugReport'
@@ -61,87 +61,17 @@ const ResultsDashboard = ({ data, isManualInput = false, onBack }) => {
         <DebugReport debugReport={result.schedule.debugReport} />
       )}
 
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Price Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
-              Electricity Prices
-            </CardTitle>
-            <CardDescription>
-              15-minute prices with HMM category coloring
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <PriceChart 
-              data={prices} 
-              priceCategories={result.priceCategories} 
-              title=""
-            />
-          </CardContent>
-        </Card>
-
-        {/* SoC Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              Battery State of Charge
-            </CardTitle>
-            <CardDescription>
-              Energy level throughout the optimization period
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {/* Debug: Log the SoC data being passed */}
-            {console.log('ResultsDashboard SoC Debug:', {
-              socData: result.schedule.soc,
-              socLength: result.schedule.soc.length,
-              firstFew: result.schedule.soc.slice(0, 5),
-              lastFew: result.schedule.soc.slice(-5)
-            })}
-            <SoCChart data={result.schedule.soc} title="" />
-          </CardContent>
-        </Card>
-
-        {/* Power Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              Battery Power Schedule
-            </CardTitle>
-            <CardDescription>
-              Charging and discharging power over time
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <PowerChart 
-              charging={result.schedule.charging} 
-              discharging={result.schedule.discharging} 
-              title=""
-            />
-          </CardContent>
-        </Card>
-
-        {/* Revenue Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
-              15-minute Revenue
-            </CardTitle>
-            <CardDescription>
-              Revenue generated each hour
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <RevenueChart data={result.schedule.revenue} title="" />
-          </CardContent>
-        </Card>
-      </div>
+      {/* Interactive Chart Section */}
+      <InteractiveChart
+        prices={prices}
+        priceCategories={result.priceCategories}
+        soc={result.schedule.soc}
+        charging={result.schedule.charging}
+        discharging={result.schedule.discharging}
+        revenue={result.schedule.revenue}
+        timestamps={result.schedule.timestamps || null}
+        title={title}
+      />
 
       {/* HMM Matrices */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

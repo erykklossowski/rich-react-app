@@ -553,8 +553,150 @@ export const useOptimizationStore = create(
             console.log(`\n❌ Some integration tests failed. Check the issues above.`)
           }
           
-          // 10. FINAL DEBUG REPORT
-          console.log('\n10. COMPLETE DEBUG REPORT')
+          // 10. MONTHLY DATA SAMPLING ANALYSIS
+          console.log('\n10. MONTHLY DATA SAMPLING ANALYSIS')
+          console.log('='.repeat(50))
+          
+          debugReport.monthlySampling = {}
+          
+          try {
+            // Sample 3 days from every month in the timeseries
+            const monthlySamples = {}
+            const allData = await loadPolishData()
+            
+            // Group data by month
+            const monthlyGroups = {}
+            allData.forEach(record => {
+              const date = new Date(record.datetime)
+              const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+              
+              if (!monthlyGroups[monthKey]) {
+                monthlyGroups[monthKey] = []
+              }
+              monthlyGroups[monthKey].push(record)
+            })
+            
+            console.log(`Found data for ${Object.keys(monthlyGroups).length} months`)
+            
+            // Sample 3 days from each month
+            Object.keys(monthlyGroups).forEach(monthKey => {
+              const monthData = monthlyGroups[monthKey]
+              const daysInMonth = [...new Set(monthData.map(r => new Date(r.datetime).getDate()))]
+              
+              // Sample 3 days (or all if less than 3)
+              const sampleDays = daysInMonth.slice(0, Math.min(3, daysInMonth.length))
+              const sampleData = monthData.filter(record => 
+                sampleDays.includes(new Date(record.datetime).getDate())
+              )
+              
+              monthlySamples[monthKey] = {
+                totalRecords: monthData.length,
+                sampleDays: sampleDays.length,
+                sampleRecords: sampleData.length,
+                dateRange: {
+                  start: monthData[0]?.datetime,
+                  end: monthData[monthData.length-1]?.datetime
+                },
+                priceStats: {
+                  min: Math.min(...monthData.map(r => r.price).filter(p => !isNaN(p))),
+                  max: Math.max(...monthData.map(r => r.price).filter(p => !isNaN(p))),
+                  avg: monthData.map(r => r.price).filter(p => !isNaN(p)).reduce((sum, p) => sum + p, 0) / monthData.length
+                },
+                sampleData: sampleData.slice(0, 5) // First 5 records as sample
+              }
+            })
+            
+            debugReport.monthlySampling = monthlySamples
+            
+            console.log('📊 MONTHLY SAMPLING RESULTS:')
+            Object.keys(monthlySamples).forEach(monthKey => {
+              const sample = monthlySamples[monthKey]
+              console.log(`${monthKey}: ${sample.totalRecords} total, ${sample.sampleRecords} sampled, price range: ${sample.priceStats.min.toFixed(0)}-${sample.priceStats.max.toFixed(0)} PLN/MWh`)
+            })
+            
+            // Check for data compression issues
+            const monthsWithData = Object.keys(monthlySamples)
+            const expectedRecordsPerMonth = 24 * 30 // ~30 days * 24 hours
+            const compressionIssues = []
+            
+            monthsWithData.forEach(monthKey => {
+              const sample = monthlySamples[monthKey]
+              const compressionRatio = sample.totalRecords / expectedRecordsPerMonth
+              
+              if (compressionRatio > 4) {
+                compressionIssues.push(`${monthKey}: ${sample.totalRecords} records (expected ~${expectedRecordsPerMonth}, ratio: ${compressionRatio.toFixed(1)}x) - 15-min data detected`)
+              } else if (compressionRatio < 0.5) {
+                compressionIssues.push(`${monthKey}: ${sample.totalRecords} records (expected ~${expectedRecordsPerMonth}, ratio: ${compressionRatio.toFixed(1)}x) - data loss detected`)
+              }
+            })
+            
+            if (compressionIssues.length > 0) {
+              console.log('⚠️  DATA COMPRESSION ISSUES DETECTED:')
+              compressionIssues.forEach(issue => console.log(`- ${issue}`))
+              debugReport.parsingIssues.push(...compressionIssues)
+            } else {
+              console.log('✅ No data compression issues detected')
+            }
+            
+          } catch (error) {
+            console.log(`❌ Monthly sampling failed: ${error.message}`)
+            debugReport.parsingIssues.push(`Monthly sampling error: ${error.message}`)
+          }
+          
+          // 11. AGGREGATION ANALYSIS
+          console.log('\n11. AGGREGATION ANALYSIS')
+          console.log('='.repeat(50))
+          
+          try {
+            // Check if we're getting 15-minute or hourly data
+            const rawCsdac = await loadCSDACPLNData()
+            const aggregatedPolish = await loadPolishData()
+            
+            const rawRecordsPerDay = rawCsdac.length / (rawCsdac.length > 0 ? (new Date(rawCsdac[rawCsdac.length-1].dtime) - new Date(rawCsdac[0].dtime)) / (1000 * 60 * 60 * 24) : 1)
+            const aggregatedRecordsPerDay = aggregatedPolish.length / (aggregatedPolish.length > 0 ? (new Date(aggregatedPolish[aggregatedPolish.length-1].datetime) - new Date(aggregatedPolish[0].datetime)) / (1000 * 60 * 60 * 24) : 1)
+            
+            console.log(`Raw CSDAC records per day: ${rawRecordsPerDay.toFixed(1)}`)
+            console.log(`Aggregated Polish records per day: ${aggregatedRecordsPerDay.toFixed(1)}`)
+            
+            if (rawRecordsPerDay > 90) { // More than 90 records per day = 15-minute data
+              console.log('✅ Raw data is 15-minute resolution')
+            } else {
+              console.log('⚠️  Raw data resolution unclear')
+            }
+            
+            if (aggregatedRecordsPerDay > 25 && aggregatedRecordsPerDay < 30) {
+              console.log('✅ Aggregated data is hourly resolution')
+            } else {
+              console.log(`⚠️  Aggregated data resolution unclear: ${aggregatedRecordsPerDay.toFixed(1)} records/day`)
+              debugReport.parsingIssues.push(`Aggregation issue: ${aggregatedRecordsPerDay.toFixed(1)} records/day (expected ~24)`)
+            }
+            
+            // Check for power rating constraint violations
+            if (aggregatedPolish.length > 1) {
+              const socChanges = []
+              for (let i = 1; i < Math.min(aggregatedPolish.length, 100); i++) {
+                const timeDiff = (new Date(aggregatedPolish[i].datetime) - new Date(aggregatedPolish[i-1].datetime)) / (1000 * 60) // minutes
+                if (timeDiff <= 15) { // 15-minute intervals
+                  socChanges.push(timeDiff)
+                }
+              }
+              
+              if (socChanges.length > 0) {
+                console.log(`⚠️  POWER RATING CONSTRAINT VIOLATION: Found ${socChanges.length} 15-minute intervals in aggregated data`)
+                console.log(`   Battery cannot change SoC in 15 minutes - violates 10 MW power rating`)
+                debugReport.parsingIssues.push(`Power rating violation: ${socChanges.length} 15-minute intervals in hourly data`)
+              } else {
+                console.log('✅ No power rating constraint violations detected')
+              }
+            }
+            
+          } catch (error) {
+            console.log(`❌ Aggregation analysis failed: ${error.message}`)
+            debugReport.parsingIssues.push(`Aggregation analysis error: ${error.message}`)
+          }
+          
+          // 12. FINAL DEBUG REPORT
+          console.log('\n12. COMPLETE DEBUG REPORT')
           console.log('='.repeat(50))
           console.log(JSON.stringify(debugReport, null, 2))
           

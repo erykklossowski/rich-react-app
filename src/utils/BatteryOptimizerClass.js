@@ -370,10 +370,10 @@ class BatteryOptimizer {
     }
 
     // Optimizes battery charge/discharge schedule using constrained optimization
-    optimizeBatterySchedule(prices, viterbiPath, params) {
+    optimizeBatterySchedule(prices, viterbiPath, params, timestamps = null) {
         // Use differential evolution for sophisticated optimization with Viterbi path guidance
         console.log('Using differential evolution optimization with Viterbi path guidance');
-        return this.differentialEvolutionOptimize(prices, params, viterbiPath);
+        return this.differentialEvolutionOptimize(prices, params, viterbiPath, timestamps);
     }
 
     // Simplified optimization for testing - bypasses complex constraints
@@ -427,7 +427,7 @@ class BatteryOptimizer {
     }
 
     // Differential Evolution optimization for battery scheduling
-    differentialEvolutionOptimize(prices, params, viterbiPath) {
+    differentialEvolutionOptimize(prices, params, viterbiPath, timestamps = null) {
         const T = prices.length;
         if (T === 0) {
             return {
@@ -729,7 +729,8 @@ class BatteryOptimizer {
             discharging: Array(T).fill(0),
             soc: Array(T).fill(0),
             revenue: Array(T).fill(0),
-            actions: Array(T).fill('idle')
+            actions: Array(T).fill('idle'),
+            timestamps: timestamps || Array(T).fill(null) // Use provided timestamps or null
         };
         let currentSoC = (params.socMin + params.socMax) / 2;
         for (let t = 0; t < T; t++) {
@@ -929,7 +930,7 @@ class BatteryOptimizer {
     }
 
     // Main optimization function that orchestrates the HMM and scheduling.
-    optimize(prices, params, categorizationMethod = 'quantile', categorizationOptions = {}) {
+    optimize(prices, params, categorizationMethod = 'quantile', categorizationOptions = {}, timestamps = null) {
         try {
             // Reset optimizer state to ensure fresh start
             this.reset();
@@ -960,7 +961,7 @@ class BatteryOptimizer {
 
             // 5. Optimize battery schedule based on Viterbi path and parameters.
             console.log(`Starting battery schedule optimization...`);
-            const schedule = this.optimizeBatterySchedule(prices, this.viterbiPath, params);
+            const schedule = this.optimizeBatterySchedule(prices, this.viterbiPath, params, timestamps);
             console.log(`Battery schedule optimization completed`);
 
             // Calculate key performance indicators.
