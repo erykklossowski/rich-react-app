@@ -118,7 +118,12 @@ const aggregateToHourly = (data) => {
         const date = new Date(record.dtime);
         // Round to the nearest hour
         const hourKey = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), 0, 0, 0);
-        const hourKeyStr = hourKey.toISOString().slice(0, 19).replace('T', ' ');
+        
+        // Use local time string to avoid timezone shift
+        const hourKeyStr = hourKey.getFullYear() + '-' + 
+                          String(hourKey.getMonth() + 1).padStart(2, '0') + '-' + 
+                          String(hourKey.getDate()).padStart(2, '0') + ' ' + 
+                          String(hourKey.getHours()).padStart(2, '0') + ':00:00';
         
         if (!hourlyMap.has(hourKeyStr)) {
             hourlyMap.set(hourKeyStr, {
@@ -316,7 +321,8 @@ export const filterDataByDateRange = (data, startDate, endDate) => {
     if (!Array.isArray(data)) return [];
     return data.filter(record => {
         const recordDate = new Date(record.dtime || record.datetime);
-        return recordDate >= start && recordDate <= end;
+        // Ensure we only include records within the exact date range
+        return recordDate >= start && recordDate <= end && !isNaN(recordDate.getTime());
     });
 };
 

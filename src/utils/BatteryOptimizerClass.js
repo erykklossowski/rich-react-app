@@ -1380,6 +1380,84 @@ class BatteryOptimizer {
         
         return results;
     }
+
+    // aFRR analysis function for contracting status analysis
+    analyze(contractingValues, categorizationMethod = 'quantile', categorizationOptions = {}) {
+        try {
+            console.log('Starting aFRR contracting status analysis...');
+            
+            if (!Array.isArray(contractingValues) || contractingValues.length === 0) {
+                return { success: false, error: 'Invalid or empty contracting values' };
+            }
+
+            // Reset state for fresh analysis
+            this.reset();
+
+            // Categorize contracting values (similar to price categorization)
+            this.priceCategories = this.categorizePrices(contractingValues, categorizationMethod, categorizationOptions);
+            console.log(`Contracting categories calculated: ${this.priceCategories.length} categories`);
+
+            // Calculate transition matrix
+            this.transitionMatrix = this.calculateTransitionMatrix(this.priceCategories);
+            console.log('Transition matrix calculated');
+
+            // Initialize emission matrix (simplified for contracting analysis)
+            this.emissionMatrix = this.initializeEmissionMatrix(contractingValues, categorizationMethod, categorizationOptions);
+            console.log('Emission matrix initialized');
+
+            // Run Viterbi decoding
+            this.viterbiPath = this.viterbiDecode(this.priceCategories, this.transitionMatrix, this.emissionMatrix);
+            console.log(`Viterbi path calculated: ${this.viterbiPath.length} states`);
+
+            // Calculate statistics
+            const stateCounts = {};
+            const viterbiStateCounts = {};
+            
+            this.priceCategories.forEach(category => {
+                stateCounts[category] = (stateCounts[category] || 0) + 1;
+            });
+            
+            this.viterbiPath.forEach(state => {
+                viterbiStateCounts[state] = (viterbiStateCounts[state] || 0) + 1;
+            });
+
+            // Calculate log likelihood (simplified)
+            let logLikelihood = 0;
+            for (let i = 0; i < this.viterbiPath.length; i++) {
+                const state = this.viterbiPath[i];
+                const observation = this.priceCategories[i];
+                if (this.emissionMatrix[state] && this.emissionMatrix[state][observation]) {
+                    logLikelihood += Math.log(this.emissionMatrix[state][observation]);
+                }
+            }
+
+            console.log('aFRR analysis completed successfully');
+
+            return {
+                success: true,
+                viterbiPath: this.viterbiPath,
+                stateCounts: stateCounts,
+                viterbiStateCounts: viterbiStateCounts,
+                logLikelihood: logLikelihood,
+                transitionMatrix: this.transitionMatrix,
+                emissionMatrix: this.emissionMatrix,
+                categories: this.priceCategories,
+                contractingStats: {
+                    min: Math.min(...contractingValues),
+                    max: Math.max(...contractingValues),
+                    avg: contractingValues.reduce((sum, v) => sum + v, 0) / contractingValues.length,
+                    count: contractingValues.length
+                }
+            };
+
+        } catch (error) {
+            console.error('aFRR analysis failed:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
 }
 
 // Export the BatteryOptimizer class for use in other files.

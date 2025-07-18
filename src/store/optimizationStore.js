@@ -13,9 +13,9 @@ export const useOptimizationStore = create(
       categorizationMethod: 'zscore', // Default to best performing method
       categorizationOptions: { lowThreshold: -0.5, highThreshold: 0.5 },
 
-      // Backtest state
-      startDate: '2024-06-14',
-      endDate: '2025-07-18',
+      // Backtest state - Use historical date range for proper backtesting
+      startDate: '2024-11-01',
+      endDate: '2025-02-28',
       analysisType: 'monthly',
       backtestParams: { pMax: 10, socMin: 10, socMax: 40, efficiency: 0.85 }, // 1x to 4x Max Power
 

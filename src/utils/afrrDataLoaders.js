@@ -70,12 +70,12 @@ export const loadAFRRDataForAnalysis = async (options = {}) => {
             filteredData = filterDataByDateRange(afrrData, startDate, endDate);
             console.log(`Filtered to ${filteredData.length} records in date range`);
         } else if (lookbackDays) {
-            // Use lookback period
-            const endDate = new Date();
-            const startDate = new Date();
+            // Use lookback period from historical data end date
+            const historicalEndDate = new Date('2025-02-28');
+            const startDate = new Date(historicalEndDate);
             startDate.setDate(startDate.getDate() - lookbackDays);
-            filteredData = filterDataByDateRange(afrrData, startDate, endDate);
-            console.log(`Filtered to ${filteredData.length} records in last ${lookbackDays} days`);
+            filteredData = filterDataByDateRange(afrrData, startDate.toISOString().split('T')[0], historicalEndDate.toISOString().split('T')[0]);
+            console.log(`Filtered to ${filteredData.length} records in last ${lookbackDays} days from historical data`);
         }
 
         // Limit number of records if specified
@@ -135,12 +135,12 @@ export const loadComprehensiveMarketData = async (options = {}) => {
             filteredData = filterDataByDateRange(marketData, startDate, endDate);
             console.log(`Filtered to ${filteredData.length} records in date range`);
         } else if (lookbackDays) {
-            // Use lookback period
-            const endDate = new Date();
-            const startDate = new Date();
+            // Use lookback period from historical data end date
+            const historicalEndDate = new Date('2025-02-28');
+            const startDate = new Date(historicalEndDate);
             startDate.setDate(startDate.getDate() - lookbackDays);
-            filteredData = filterDataByDateRange(marketData, startDate, endDate);
-            console.log(`Filtered to ${filteredData.length} records in last ${lookbackDays} days`);
+            filteredData = filterDataByDateRange(marketData, startDate.toISOString().split('T')[0], historicalEndDate.toISOString().split('T')[0]);
+            console.log(`Filtered to ${filteredData.length} records in last ${lookbackDays} days from historical data`);
         }
 
         // Limit number of records if specified
@@ -213,8 +213,34 @@ export const loadSystemContractingData = async (options = {}) => {
 
         console.log(`Loaded ${skData.length} system contracting status records (15-minute resolution)`);
 
+        // Validate and clean SK data
+        const validSkData = skData.filter(record => {
+            // Check for malformed dates (like "2024-10-27 02a:15:00")
+            if (!record.dtime || typeof record.dtime !== 'string') {
+                console.warn(`Invalid dtime in SK record: ${record.dtime}`);
+                return false;
+            }
+            
+            // Check for malformed date patterns
+            if (record.dtime.includes('a:') || record.dtime.includes('b:') || record.dtime.includes('c:')) {
+                console.warn(`Malformed date pattern in SK record: ${record.dtime}`);
+                return false;
+            }
+            
+            // Validate date parsing
+            const date = new Date(record.dtime);
+            if (isNaN(date.getTime())) {
+                console.warn(`Invalid date in SK record: ${record.dtime}`);
+                return false;
+            }
+            
+            return true;
+        });
+
+        console.log(`Validated ${validSkData.length} SK records (removed ${skData.length - validSkData.length} invalid records)`);
+
         // Aggregate 15-minute data to hourly for better analysis
-        const hourlySkData = aggregateSkDataToHourly(skData);
+        const hourlySkData = aggregateSkDataToHourly(validSkData);
         console.log(`Aggregated to ${hourlySkData.length} hourly records`);
 
         // Filter by date range if specified
@@ -223,12 +249,12 @@ export const loadSystemContractingData = async (options = {}) => {
             filteredData = filterDataByDateRange(hourlySkData, startDate, endDate);
             console.log(`Filtered to ${filteredData.length} records in date range`);
         } else if (lookbackDays) {
-            // Use lookback period
-            const endDate = new Date();
-            const startDate = new Date();
+            // Use lookback period from historical data end date
+            const historicalEndDate = new Date('2025-02-28');
+            const startDate = new Date(historicalEndDate);
             startDate.setDate(startDate.getDate() - lookbackDays);
-            filteredData = filterDataByDateRange(hourlySkData, startDate, endDate);
-            console.log(`Filtered to ${filteredData.length} records in last ${lookbackDays} days`);
+            filteredData = filterDataByDateRange(hourlySkData, startDate.toISOString().split('T')[0], historicalEndDate.toISOString().split('T')[0]);
+            console.log(`Filtered to ${filteredData.length} records in last ${lookbackDays} days from historical data`);
         }
 
         // Limit number of records if specified
@@ -302,12 +328,12 @@ export const loadDayAheadPriceData = async (options = {}) => {
             filteredData = filterDataByDateRange(csdacData, startDate, endDate);
             console.log(`Filtered to ${filteredData.length} records in date range`);
         } else if (lookbackDays) {
-            // Use lookback period
-            const endDate = new Date();
-            const startDate = new Date();
+            // Use lookback period from historical data end date
+            const historicalEndDate = new Date('2025-02-28');
+            const startDate = new Date(historicalEndDate);
             startDate.setDate(startDate.getDate() - lookbackDays);
-            filteredData = filterDataByDateRange(csdacData, startDate, endDate);
-            console.log(`Filtered to ${filteredData.length} records in last ${lookbackDays} days`);
+            filteredData = filterDataByDateRange(csdacData, startDate.toISOString().split('T')[0], historicalEndDate.toISOString().split('T')[0]);
+            console.log(`Filtered to ${filteredData.length} records in last ${lookbackDays} days from historical data`);
         }
 
         // Limit number of records if specified
@@ -348,10 +374,25 @@ const aggregateSkDataToHourly = (data) => {
     const hourlyMap = new Map();
     
     data.forEach(record => {
-        const date = new Date(record.dtime);
-        // Round to the nearest hour
-        const hourKey = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), 0, 0, 0);
-        const hourKeyStr = hourKey.toISOString().slice(0, 19).replace('T', ' ');
+        try {
+            const date = new Date(record.dtime);
+            
+            // Validate date
+            if (isNaN(date.getTime())) {
+                console.warn(`Invalid date in SK data: ${record.dtime}`);
+                return; // Skip this record
+            }
+            
+            // Round to the nearest hour
+            const hourKey = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), 0, 0, 0);
+            
+            // Validate hourKey
+            if (isNaN(hourKey.getTime())) {
+                console.warn(`Invalid hourKey for date: ${record.dtime}`);
+                return; // Skip this record
+            }
+            
+            const hourKeyStr = hourKey.toISOString().slice(0, 19).replace('T', ' ');
         
         if (!hourlyMap.has(hourKeyStr)) {
             hourlyMap.set(hourKeyStr, {
@@ -377,6 +418,9 @@ const aggregateSkDataToHourly = (data) => {
             hourlyRecord.sk_cost_values.push(record.sk_cost);
         }
         hourlyRecord.count++;
+        } catch (error) {
+            console.warn(`Error processing SK record: ${record.dtime}`, error.message);
+        }
     });
     
     // Calculate average values for each hour
