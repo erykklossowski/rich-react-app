@@ -84,14 +84,19 @@ export const loadAllPSEData = async () => {
     }
 };
 
-// Legacy function for backward compatibility - now uses CSDAC PLN data
+// Legacy function for backward compatibility - now uses CSDAC PLN data aggregated to hourly
 export const loadPolishData = async () => {
     try {
-        console.log('Loading CSDAC PLN data as Polish data...');
+        console.log('Loading CSDAC PLN data as Polish data (hourly aggregation)...');
         const csdacData = await loadCSDACPLNData();
         
-        // Transform CSDAC data to match the expected format
-        return csdacData.map(record => ({
+        // Aggregate 15-minute data to hourly data for battery optimization
+        const hourlyData = aggregateToHourly(csdacData);
+        
+        console.log(`Aggregated ${csdacData.length} 15-minute records to ${hourlyData.length} hourly records`);
+        
+        // Transform to match the expected format
+        return hourlyData.map(record => ({
             datetime: record.dtime,
             price: record.csdac_pln,
             dtime_utc: record.dtime_utc,
@@ -103,6 +108,45 @@ export const loadPolishData = async () => {
         console.error('Error loading Polish data:', error);
         throw error;
     }
+};
+
+// Aggregate 15-minute data to hourly data
+const aggregateToHourly = (data) => {
+    const hourlyMap = new Map();
+    
+    data.forEach(record => {
+        const date = new Date(record.dtime);
+        // Round to the nearest hour
+        const hourKey = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), 0, 0, 0);
+        const hourKeyStr = hourKey.toISOString().slice(0, 19).replace('T', ' ');
+        
+        if (!hourlyMap.has(hourKeyStr)) {
+            hourlyMap.set(hourKeyStr, {
+                dtime: hourKeyStr,
+                dtime_utc: hourKey.toISOString(),
+                business_date: record.business_date,
+                period: date.getHours(),
+                prices: [],
+                count: 0
+            });
+        }
+        
+        const hourlyRecord = hourlyMap.get(hourKeyStr);
+        hourlyRecord.prices.push(record.csdac_pln);
+        hourlyRecord.count++;
+    });
+    
+    // Calculate average price for each hour
+    const hourlyData = Array.from(hourlyMap.values()).map(record => ({
+        ...record,
+        csdac_pln: record.prices.reduce((sum, price) => sum + price, 0) / record.prices.length,
+        price_count: record.count
+    }));
+    
+    // Sort by time
+    hourlyData.sort((a, b) => new Date(a.dtime) - new Date(b.dtime));
+    
+    return hourlyData;
 };
 
 // Get aFRR specific data (combines volumes and prices)

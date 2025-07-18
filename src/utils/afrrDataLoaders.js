@@ -211,19 +211,23 @@ export const loadSystemContractingData = async (options = {}) => {
         const pseData = await loadAllPSEData();
         const skData = pseData.sk_data;
 
-        console.log(`Loaded ${skData.length} system contracting status records`);
+        console.log(`Loaded ${skData.length} system contracting status records (15-minute resolution)`);
+
+        // Aggregate 15-minute data to hourly for better analysis
+        const hourlySkData = aggregateSkDataToHourly(skData);
+        console.log(`Aggregated to ${hourlySkData.length} hourly records`);
 
         // Filter by date range if specified
-        let filteredData = skData;
+        let filteredData = hourlySkData;
         if (startDate && endDate) {
-            filteredData = filterDataByDateRange(skData, startDate, endDate);
+            filteredData = filterDataByDateRange(hourlySkData, startDate, endDate);
             console.log(`Filtered to ${filteredData.length} records in date range`);
         } else if (lookbackDays) {
             // Use lookback period
             const endDate = new Date();
             const startDate = new Date();
             startDate.setDate(startDate.getDate() - lookbackDays);
-            filteredData = filterDataByDateRange(skData, startDate, endDate);
+            filteredData = filterDataByDateRange(hourlySkData, startDate, endDate);
             console.log(`Filtered to ${filteredData.length} records in last ${lookbackDays} days`);
         }
 
@@ -337,6 +341,63 @@ export const loadDayAheadPriceData = async (options = {}) => {
         console.error('Error loading day-ahead price data:', error);
         throw error;
     }
+};
+
+// Aggregate SK data from 15-minute to hourly resolution
+const aggregateSkDataToHourly = (data) => {
+    const hourlyMap = new Map();
+    
+    data.forEach(record => {
+        const date = new Date(record.dtime);
+        // Round to the nearest hour
+        const hourKey = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), 0, 0, 0);
+        const hourKeyStr = hourKey.toISOString().slice(0, 19).replace('T', ' ');
+        
+        if (!hourlyMap.has(hourKeyStr)) {
+            hourlyMap.set(hourKeyStr, {
+                dtime: hourKeyStr,
+                dtime_utc: hourKey.toISOString(),
+                business_date: record.business_date,
+                period: date.getHours(),
+                sk_d1_fcst_values: [],
+                sk_d_fcst_values: [],
+                sk_cost_values: [],
+                count: 0
+            });
+        }
+        
+        const hourlyRecord = hourlyMap.get(hourKeyStr);
+        if (record.sk_d1_fcst !== null && !isNaN(record.sk_d1_fcst)) {
+            hourlyRecord.sk_d1_fcst_values.push(record.sk_d1_fcst);
+        }
+        if (record.sk_d_fcst !== null && !isNaN(record.sk_d_fcst)) {
+            hourlyRecord.sk_d_fcst_values.push(record.sk_d_fcst);
+        }
+        if (record.sk_cost !== null && !isNaN(record.sk_cost)) {
+            hourlyRecord.sk_cost_values.push(record.sk_cost);
+        }
+        hourlyRecord.count++;
+    });
+    
+    // Calculate average values for each hour
+    const hourlyData = Array.from(hourlyMap.values()).map(record => ({
+        dtime: record.dtime,
+        dtime_utc: record.dtime_utc,
+        business_date: record.business_date,
+        period: record.period,
+        sk_d1_fcst: record.sk_d1_fcst_values.length > 0 ? 
+            record.sk_d1_fcst_values.reduce((sum, v) => sum + v, 0) / record.sk_d1_fcst_values.length : null,
+        sk_d_fcst: record.sk_d_fcst_values.length > 0 ? 
+            record.sk_d_fcst_values.reduce((sum, v) => sum + v, 0) / record.sk_d_fcst_values.length : null,
+        sk_cost: record.sk_cost_values.length > 0 ? 
+            record.sk_cost_values.reduce((sum, v) => sum + v, 0) / record.sk_cost_values.length : null,
+        data_points: record.count
+    }));
+    
+    // Sort by time
+    hourlyData.sort((a, b) => new Date(a.dtime) - new Date(b.dtime));
+    
+    return hourlyData;
 };
 
 // Export configuration for use in other modules

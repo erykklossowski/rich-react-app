@@ -63,16 +63,19 @@ const AFRRVisualization = () => {
             
             const contractingData = await loadSystemContractingData({
                 lookbackDays,
-                maxRecords: 1000
+                maxRecords: timeRange === '24h' ? 24 : timeRange === '7d' ? 168 : 720 // Hourly intervals: 24h=24, 7d=168, 30d=720
             });
             
             // Transform data to match expected format
-            const processedData = {
+            let processedData = {
                 contractingValues: contractingData.data.map(record => record.sk_d1_fcst),
                 timestamps: contractingData.data.map(record => record.dtime),
                 periods: contractingData.data.map(record => record.period),
                 field: 'sk_d1_fcst'
             };
+
+            // No need for sampling since we're now using hourly data
+            console.log(`Using ${processedData.contractingValues.length} hourly data points for analysis`);
             
             setData(processedData);
             
@@ -104,7 +107,8 @@ const AFRRVisualization = () => {
 
         const labels = data.timestamps.map((timestamp, index) => {
             const date = new Date(timestamp);
-            return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+            // Show date and time for better readability
+            return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
         });
 
         const contractingValues = data.contractingValues;
@@ -142,7 +146,8 @@ const AFRRVisualization = () => {
 
         const labels = data.timestamps.map((timestamp, index) => {
             const date = new Date(timestamp);
-            return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+            // Show date and time for better readability
+            return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
         });
 
         const stateColors = {
@@ -217,6 +222,11 @@ const AFRRVisualization = () => {
                 title: {
                     display: true,
                     text: 'Time'
+                },
+                ticks: {
+                    maxTicksLimit: 20, // Limit number of x-axis labels to prevent overcrowding
+                    maxRotation: 45,
+                    minRotation: 0
                 }
             }
         }
@@ -272,6 +282,11 @@ const AFRRVisualization = () => {
                 title: {
                     display: true,
                     text: 'Time'
+                },
+                ticks: {
+                    maxTicksLimit: 20, // Limit number of x-axis labels to prevent overcrowding
+                    maxRotation: 45,
+                    minRotation: 0
                 }
             }
         }
@@ -396,8 +411,25 @@ const AFRRVisualization = () => {
                     {chartData && (
                         <div className="bg-white border rounded-lg p-4">
                             <h3 className="text-lg font-semibold mb-4">Contracting Status Time Series</h3>
-                            <div className="h-80">
-                                <Line data={chartData} options={chartOptions} />
+                            <div className="h-80 w-full" style={{ position: 'relative' }}>
+                                <Line 
+                                    data={chartData} 
+                                    options={{
+                                        ...chartOptions,
+                                        responsive: true,
+                                        maintainAspectRatio: false,
+                                        devicePixelRatio: 1,
+                                        elements: {
+                                            point: {
+                                                radius: 2,
+                                                hoverRadius: 4
+                                            },
+                                            line: {
+                                                tension: 0.1
+                                            }
+                                        }
+                                    }} 
+                                />
                             </div>
                         </div>
                     )}
@@ -406,8 +438,25 @@ const AFRRVisualization = () => {
                     {viterbiChartData && analysis && analysis.success && (
                         <div className="bg-white border rounded-lg p-4">
                             <h3 className="text-lg font-semibold mb-4">HMM State Analysis</h3>
-                            <div className="h-80">
-                                <Line data={viterbiChartData} options={viterbiChartOptions} />
+                            <div className="h-80 w-full" style={{ position: 'relative' }}>
+                                <Line 
+                                    data={viterbiChartData} 
+                                    options={{
+                                        ...viterbiChartOptions,
+                                        responsive: true,
+                                        maintainAspectRatio: false,
+                                        devicePixelRatio: 1,
+                                        elements: {
+                                            point: {
+                                                radius: 2,
+                                                hoverRadius: 4
+                                            },
+                                            line: {
+                                                tension: 0.1
+                                            }
+                                        }
+                                    }} 
+                                />
                             </div>
                         </div>
                     )}
